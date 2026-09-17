@@ -12,6 +12,8 @@
  *   - A dead peer is detected by heartbeat, not by hoping `close` fires.
  *   - Simulation can run with no phone connected at all.
  */
+const fs = require('fs');
+const path = require('path');
 const { WebSocketServer } = require('ws');
 const { validateMessage, envelope, makePose, PROTOCOL_VERSION, MESSAGE_TYPES } = require('../public/shared/protocol.mjs');
 const { MapState } = require('./mapstate');
@@ -258,6 +260,37 @@ class Hub {
       case 'speak':
         this.speak(client, msg.text, msg.level);
         break;
+
+      case 'save_training_dataset': {
+        try {
+          const dataset = msg.dataset || {};
+          const samples = Array.isArray(dataset.samples) ? dataset.samples : [];
+          const nowStr = new Date().toISOString().replace(/[:.]/g, '-');
+          const filename = `real_echo_dataset_${nowStr}.json`;
+          const dir = path.join(__dirname, '..', 'recordings');
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          const targetPath = path.join(dir, filename);
+          const latestPath = path.join(dir, 'real_training_dataset_latest.json');
+          const payload = {
+            created_at: new Date().toISOString(),
+            device: dataset.device || 'OnePlus',
+            total_samples: samples.length,
+            stats: dataset.stats || {},
+            samples: samples,
+          };
+          fs.writeFileSync(targetPath, JSON.stringify(payload, null, 2));
+          fs.writeFileSync(latestPath, JSON.stringify(payload, null, 2));
+          this.send(client, envelope('training_dataset_saved', {
+            ok: true,
+            filename,
+            count: samples.length,
+            stats: dataset.stats,
+          }));
+        } catch (err) {
+          this.send(client, envelope('error', { error: 'Failed to save dataset: ' + err.message, fatal: false }));
+        }
+        break;
+      }
 
       default:
         // Known-but-unhandled types are server-originated; ignore quietly.

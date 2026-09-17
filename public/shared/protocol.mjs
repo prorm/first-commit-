@@ -38,6 +38,7 @@ export const MESSAGE_TYPES = {
   request_summary:  { from: 'client', doc: 'ask the AWS adapter for a post-scan interpretation' },
   speak:            { from: 'client', doc: 'ask the server to synthesise guidance speech' },
   reconstruct:      { from: 'client', doc: 'force a surface-reconstruction pass and broadcast it' },
+  save_training_dataset: { from: 'client', doc: 'stream collected real acoustic envelope windows for neural net training' },
 
   // ---- server -> client
   welcome:          { from: 'server', doc: 'session id, protocol version, server capabilities' },
@@ -48,6 +49,7 @@ export const MESSAGE_TYPES = {
   scan_summary:     { from: 'server', doc: 'optional Amazon Bedrock natural-language interpretation' },
   recording_list:   { from: 'server', doc: 'available recordings' },
   replay_status:    { from: 'server', doc: 'replay progress / finished' },
+  training_dataset_saved: { from: 'server', doc: 'acknowledgement with saved dataset filename and sample count' },
   status:           { from: 'server', doc: 'session + peer + adapter status broadcast' },
   error:            { from: 'server', doc: 'non-fatal problem report; never closes the socket' },
 };

@@ -36,13 +36,18 @@ export class Calibrator {
   /** Feed a raw (uncalibrated) measured range during collection. */
   addSample(rangeM, confidence) {
     if (!this.active) return null;
+    this.lastSeen = rangeM;
     // Only confident, plausible samples count — calibrating against a noise
     // peak would bake an error in permanently.
     if (!(rangeM > 0.15) || rangeM > 6) return this.progress();
-    if (confidence != null && confidence < 0.25) return this.progress();
+    if (confidence != null && confidence < 0.20) return this.progress();
     // Reject anything more than 60 % away from the declared distance: that is
     // a different surface, not a calibration sample.
-    if (Math.abs(rangeM - this.knownDistanceM) > this.knownDistanceM * 0.6 + 0.3) return this.progress();
+    if (Math.abs(rangeM - this.knownDistanceM) > this.knownDistanceM * 0.6 + 0.3) {
+      this.mismatchNotice = `Echo detected at ${rangeM.toFixed(2)} m (expected ~${this.knownDistanceM.toFixed(2)} m)`;
+      return this.progress();
+    }
+    this.mismatchNotice = null;
 
     this.samples.push(rangeM);
     if (this.samples.length >= this.targetSamples) return this.finish();
@@ -56,6 +61,8 @@ export class Calibrator {
       target: this.targetSamples,
       fraction: this.samples.length / this.targetSamples,
       knownDistanceM: this.knownDistanceM,
+      lastSeen: this.lastSeen,
+      mismatchNotice: this.mismatchNotice,
     };
     this.emit();
     return p;

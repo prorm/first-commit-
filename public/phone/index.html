@@ -83,6 +83,9 @@
     <button class="btn btn-sm" id="btnVoice">VOICE ON</button>
     <button class="btn btn-sm" id="btnMode">MODE: SIM</button>
   </div>
+  <button class="btn btn-secondary" id="btnDataset" style="border-color: rgba(44,232,245,0.5); color: var(--live); font-size: 11px; margin-top: 4px; font-weight: 700;">
+    🎯 RECORD TRAINING DATASET
+  </button>
 </section>
 
 <!-- Manual pose control, used when the phone has no usable motion sensors -->
@@ -140,6 +143,115 @@
       <button class="btn btn-primary" id="calStart">COLLECT SAMPLES</button>
     </div>
     <p class="fineprint">Calibration removes fixed latency and speed-of-sound error. It does not fix beam-width ambiguity, which surface the echo came from, or classifier accuracy.</p>
+  </div>
+</div>
+
+<!-- Guided Training Dataset Collection Sheet -->
+<div class="sheet" id="datasetSheet" hidden>
+  <div class="sheet-inner" style="max-height: 92vh; overflow-y: auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+      <h2 style="margin: 0; font-size: 16px; color: var(--live); letter-spacing: 0.05em;">🎯 REAL ECHO DATA COLLECTOR</h2>
+      <button class="btn btn-sm" id="dsClose" style="padding: 4px 10px; font-size: 11px;">✕</button>
+    </div>
+
+    <!-- Step Progress Tracker -->
+    <div class="ds-stepper">
+      <div class="ds-step on" id="dsStepTab1"><span class="num">1</span> WALL</div>
+      <div class="ds-step" id="dsStepTab2"><span class="num">2</span> SOFT / HUMAN</div>
+      <div class="ds-step" id="dsStepTab3"><span class="num">3</span> OPENING</div>
+      <div class="ds-step" id="dsStepTab4"><span class="num">4</span> SAVE</div>
+    </div>
+
+    <!-- STEP 1: WALL -->
+    <div class="ds-panel" id="dsPanel1">
+      <div class="ds-badge" style="background: rgba(78, 168, 255, 0.2); color: #4ea8ff; border: 1px solid #4ea8ff;">STEP 1: HARD WALL (CLASS 0)</div>
+      <div class="ds-instructions">
+        <p><b>Target:</b> Flat rigid surface (drywall, door, window, or tiled wall).</p>
+        <ol class="steps">
+          <li>Stand <b>1.0 to 1.5 m</b> away facing the wall directly.</li>
+          <li>Point the top speaker/mic of the phone straight at the wall.</li>
+          <li>Tap <b>START RECORDING</b> and hold still for ~3 seconds.</li>
+        </ol>
+      </div>
+      <div class="ds-counter">
+        <div class="ds-count-big" id="dsCount1">0 <span class="unit">/ 50</span></div>
+        <div class="ds-count-label">PULSES COLLECTED</div>
+      </div>
+      <div class="meter cal-meter"><div class="meter-fill" id="dsFill1" style="width: 0%;"></div></div>
+      <div class="ds-status" id="dsStatus1">Ready to record real wall echoes.</div>
+      <div class="sheet-btns" style="margin-top: 12px;">
+        <button class="btn btn-primary" id="dsAction1">START RECORDING (WALL)</button>
+        <button class="btn" id="dsNext1" disabled>NEXT: SOFT / HUMAN →</button>
+      </div>
+    </div>
+
+    <!-- STEP 2: SOFT / HUMAN -->
+    <div class="ds-panel" id="dsPanel2" hidden>
+      <div class="ds-badge" style="background: rgba(255, 180, 84, 0.2); color: #ffb454; border: 1px solid #ffb454;">STEP 2: SOFT / HUMAN (CLASS 1)</div>
+      <div class="ds-instructions">
+        <p><b>Target:</b> A person standing in normal clothes, OR couch / mattress / curtains.</p>
+        <ol class="steps">
+          <li>Have a person stand <b>1.0 to 1.5 m</b> directly in front of the phone.</li>
+          <li>Aim the phone boresight at their chest or torso.</li>
+          <li>Tap <b>START RECORDING</b> and hold still for ~3 seconds.</li>
+        </ol>
+      </div>
+      <div class="ds-counter">
+        <div class="ds-count-big" id="dsCount2">0 <span class="unit">/ 50</span></div>
+        <div class="ds-count-label">PULSES COLLECTED</div>
+      </div>
+      <div class="meter cal-meter"><div class="meter-fill" id="dsFill2" style="width: 0%;"></div></div>
+      <div class="ds-status" id="dsStatus2">Ready to record human / absorptive echoes.</div>
+      <div class="sheet-btns" style="margin-top: 12px;">
+        <button class="btn btn-primary" id="dsAction2">START RECORDING (HUMAN/SOFT)</button>
+        <button class="btn" id="dsNext2" disabled>NEXT: OPENING →</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: OPENING -->
+    <div class="ds-panel" id="dsPanel3" hidden>
+      <div class="ds-badge" style="background: rgba(155, 140, 255, 0.2); color: #9b8cff; border: 1px solid #9b8cff;">STEP 3: OPENING / VOID (CLASS 2)</div>
+      <div class="ds-instructions">
+        <p><b>Target:</b> Open doorway, long hallway, or large room (>3 m to nearest obstacle).</p>
+        <ol class="steps">
+          <li>Aim the phone down the center of an open corridor or doorway.</li>
+          <li>Ensure no obstacles or people are within 3 meters.</li>
+          <li>Tap <b>START RECORDING</b> and hold still for ~3 seconds.</li>
+        </ol>
+      </div>
+      <div class="ds-counter">
+        <div class="ds-count-big" id="dsCount3">0 <span class="unit">/ 50</span></div>
+        <div class="ds-count-label">PULSES COLLECTED</div>
+      </div>
+      <div class="meter cal-meter"><div class="meter-fill" id="dsFill3" style="width: 0%;"></div></div>
+      <div class="ds-status" id="dsStatus3">Ready to record open space returns.</div>
+      <div class="sheet-btns" style="margin-top: 12px;">
+        <button class="btn btn-primary" id="dsAction3">START RECORDING (OPENING)</button>
+        <button class="btn" id="dsNext3" disabled>NEXT: REVIEW & SAVE →</button>
+      </div>
+    </div>
+
+    <!-- STEP 4: REVIEW & SAVE -->
+    <div class="ds-panel" id="dsPanel4" hidden>
+      <div class="ds-badge" style="background: rgba(44, 232, 245, 0.2); color: var(--live); border: 1px solid var(--live);">STEP 4: DATASET SUMMARY</div>
+      <div class="ds-summary-box">
+        <div class="ds-sum-row"><span>WALL Pulses:</span><b id="dsSumWall">0</b></div>
+        <div class="ds-sum-row"><span>SOFT/HUMAN Pulses:</span><b id="dsSumSoft">0</b></div>
+        <div class="ds-sum-row"><span>OPENING Pulses:</span><b id="dsSumOpen">0</b></div>
+        <div class="ds-sum-row" style="border-top: 1px solid var(--line); padding-top: 6px; font-weight: 700;">
+          <span>Total Real Envelopes:</span><b id="dsSumTotal">0</b>
+        </div>
+      </div>
+      <div class="ds-status" id="dsStatus4" style="margin-top: 10px;">Tap below to upload dataset to laptop server.</div>
+      <div class="sheet-btns" style="margin-top: 12px; flex-direction: column; gap: 8px;">
+        <button class="btn btn-primary" id="dsBtnSaveServer">💾 SAVE TO LAPTOP SERVER</button>
+        <button class="btn" id="dsBtnDownload">📥 DOWNLOAD JSON TO PHONE</button>
+        <button class="btn" id="dsBtnReset" style="border-color: var(--line-2); color: var(--text-3); font-size: 11px;">RESET & START OVER</button>
+      </div>
+      <div class="ds-hint" style="margin-top: 10px; font-size: 10.5px; color: var(--text-3); line-height: 1.5;">
+        After saving, run <code>node scripts/train-real.mjs</code> on your laptop to train EchoNet and update weights instantly!
+      </div>
+    </div>
   </div>
 </div>
 

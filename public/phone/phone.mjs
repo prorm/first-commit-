@@ -34,6 +34,17 @@ const ui = {
   gateSheet: $('gateSheet'), gateGo: $('gateGo'), gateSkip: $('gateSkip'), gateCaps: $('gateCaps'),
   calSheet: $('calSheet'), calStart: $('calStart'), calCancel: $('calCancel'),
   calDist: $('calDist'), calChoices: $('calChoices'), calFill: $('calFill'), calStatus: $('calStatus'),
+  btnDataset: $('btnDataset'),
+  datasetSheet: $('datasetSheet'), dsClose: $('dsClose'),
+  dsStepTab1: $('dsStepTab1'), dsStepTab2: $('dsStepTab2'), dsStepTab3: $('dsStepTab3'), dsStepTab4: $('dsStepTab4'),
+  dsPanel1: $('dsPanel1'), dsPanel2: $('dsPanel2'), dsPanel3: $('dsPanel3'), dsPanel4: $('dsPanel4'),
+  dsAction1: $('dsAction1'), dsAction2: $('dsAction2'), dsAction3: $('dsAction3'),
+  dsNext1: $('dsNext1'), dsNext2: $('dsNext2'), dsNext3: $('dsNext3'),
+  dsFill1: $('dsFill1'), dsFill2: $('dsFill2'), dsFill3: $('dsFill3'),
+  dsCount1: $('dsCount1'), dsCount2: $('dsCount2'), dsCount3: $('dsCount3'),
+  dsStatus1: $('dsStatus1'), dsStatus2: $('dsStatus2'), dsStatus3: $('dsStatus3'), dsStatus4: $('dsStatus4'),
+  dsSumWall: $('dsSumWall'), dsSumSoft: $('dsSumSoft'), dsSumOpen: $('dsSumOpen'), dsSumTotal: $('dsSumTotal'),
+  dsBtnSaveServer: $('dsBtnSaveServer'), dsBtnDownload: $('dsBtnDownload'), dsBtnReset: $('dsBtnReset'),
 };
 
 const state = {
@@ -97,6 +108,110 @@ const calibrator = new Calibrator({
   onUpdate: (st) => renderCalibration(st),
 });
 
+class DatasetCollector {
+  constructor(opts = {}) {
+    this.targetCount = 50;
+    this.samples = [];
+    this.active = false;
+    this.currentClass = 0; // 0: WALL, 1: SOFT, 2: OPENING
+    this.currentStep = 1;
+    this.onUpdate = opts.onUpdate || (() => {});
+    this.onComplete = opts.onComplete || (() => {});
+  }
+
+  startStep(step) {
+    this.currentStep = step;
+    this.currentClass = step - 1;
+    this.active = true;
+    this.emit();
+  }
+
+  stop() {
+    this.active = false;
+    this.emit();
+  }
+
+  reset() {
+    this.samples = [];
+    this.active = false;
+    this.currentClass = 0;
+    this.currentStep = 1;
+    this.emit();
+  }
+
+  get counts() {
+    const c = [0, 0, 0];
+    for (const s of this.samples) {
+      if (s.classIndex >= 0 && s.classIndex <= 2) c[s.classIndex]++;
+    }
+    return { wall: c[0], soft: c[1], opening: c[2], total: this.samples.length };
+  }
+
+  addPulse(raw, diag, pipeline) {
+    if (!this.active || this.currentClass == null) return;
+    const clsIdx = this.currentClass;
+    const clsName = ['WALL', 'SOFT', 'OPENING'][clsIdx];
+
+    let win = null;
+    if (diag && diag.window) {
+      win = Array.from(diag.window);
+    } else if (clsIdx === 2 && pipeline && (pipeline.profile || pipeline.aligned)) {
+      // Opening fallback: if no peak exists, extract a 64-sample slice from search window
+      const buf = pipeline.profile || pipeline.aligned;
+      const mid = Math.round((pipeline.nLo + pipeline.nHi) / 2);
+      const half = 32;
+      const w = new Float32Array(64);
+      let mx = 0;
+      for (let i = 0; i < 64; i++) {
+        const v = buf[mid - half + i] || 0;
+        w[i] = v;
+        if (v > mx) mx = v;
+      }
+      if (mx > 0) for (let i = 0; i < 64; i++) w[i] /= mx;
+      win = Array.from(w);
+    }
+
+    if (!win || win.length !== 64) return;
+
+    this.samples.push({
+      classIndex: clsIdx,
+      className: clsName,
+      window: win,
+      range_m: raw ? raw.range_m : (diag && diag.rawRange ? diag.rawRange : null),
+      snr_db: diag ? diag.snrDb : 0,
+      t: Date.now(),
+    });
+
+    const stepCount = this.samples.filter((s) => s.classIndex === clsIdx).length;
+    this.emit();
+
+    if (stepCount >= this.targetCount) {
+      this.active = false;
+      this.onComplete(this.currentStep, stepCount);
+      this.emit();
+    }
+  }
+
+  progress() {
+    return {
+      active: this.active,
+      step: this.currentStep,
+      classIndex: this.currentClass,
+      counts: this.counts,
+      target: this.targetCount,
+    };
+  }
+
+  emit() {
+    this.onUpdate(this.progress());
+  }
+}
+
+const datasetCollector = new DatasetCollector({
+  onUpdate: (st) => renderDatasetState(st),
+  onComplete: (step, count) => onDatasetStepComplete(step, count),
+});
+
 const sensor = new AcousticSensor({
   classifier: EchoNet,
   onLog: (m, l) => log(m, l),
@@ -125,10 +240,15 @@ function deviceInfo() {
 // Detection path
 // ---------------------------------------------------------------------------
 function onSensorPulse(raw, diag) {
-  if (calibrator.active && raw) {
-    // Calibration samples must be the *uncalibrated* range.
-    const rawRange = diag && diag.rawRange != null ? diag.rawRange : raw.range_m;
-    calibrator.addSample(rawRange, raw.confidence);
+  if (calibrator.active) {
+    // Calibration samples: uncalibrated range or diag rawRange
+    const rawRange = diag && diag.rawRange != null ? diag.rawRange : (raw ? raw.range_m : null);
+    const conf = raw ? raw.confidence : (diag && diag.snrDb > 4 ? 0.4 : 0.2);
+    if (rawRange != null) calibrator.addSample(rawRange, conf);
+  }
+
+  if (datasetCollector.active) {
+    datasetCollector.addPulse(raw, diag, sensor.pipeline);
   }
 
   if (!raw) {
@@ -242,6 +362,15 @@ function onServerMessage(msg) {
 
     case 'scan_start':
       if (state.mode !== 'live') log('Simulation scan running on the server.', 'info');
+      break;
+
+    case 'training_dataset_saved':
+      if (ui.dsStatus4) {
+        ui.dsStatus4.className = 'ds-status ok';
+        ui.dsStatus4.textContent = `✓ Saved ${msg.count} real echo envelopes to recordings/${msg.filename}!`;
+      }
+      playChime(true);
+      log(`Dataset saved to server: ${msg.filename} (${msg.count} samples)`, 'success');
       break;
 
     case 'error':
@@ -361,8 +490,9 @@ function renderCalibration(st) {
   if (!ui.calSheet.hidden) {
     ui.calFill.style.width = ((st.collected / st.target) * 100).toFixed(0) + '%';
     if (st.active) {
-      ui.calStatus.className = 'cal-status';
-      ui.calStatus.textContent = 'Hold still — ' + st.collected + ' / ' + st.target + ' samples.';
+      ui.calStatus.className = 'cal-status' + (st.mismatchNotice ? ' warn' : '');
+      ui.calStatus.textContent = 'Hold still — ' + st.collected + ' / ' + st.target + ' samples.'
+        + (st.mismatchNotice ? ' (' + st.mismatchNotice + ')' : '');
     } else if (st.result) {
       const r = st.result;
       if (r.ok) {
@@ -376,6 +506,89 @@ function renderCalibration(st) {
         ui.calStatus.textContent = r.warning || r.error || 'Calibration failed.';
       }
     }
+  }
+}
+
+function playChime(success = true) {
+  try {
+    const ctx = (sensor && sensor.audioCtx) || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(success ? 880 : 440, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(success ? 1320 : 330, ctx.currentTime + 0.18);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.26);
+    if (navigator.vibrate) navigator.vibrate(success ? [60, 40, 60] : 120);
+  } catch (e) { /* ignore */ }
+}
+
+function renderDatasetState(st) {
+  if (ui.datasetSheet.hidden) return;
+  const counts = st.counts;
+  const target = st.target;
+
+  // Step 1 Wall
+  const wallCount = counts.wall;
+  ui.dsCount1.innerHTML = `${wallCount} <span class="unit">/ ${target}</span>`;
+  ui.dsFill1.style.width = `${Math.min(100, (wallCount / target) * 100)}%`;
+  if (st.active && st.classIndex === 0) {
+    ui.dsStatus1.className = 'ds-status ok';
+    ui.dsStatus1.textContent = `Recording WALL... (${wallCount}/${target}) Hold phone steady!`;
+  }
+
+  // Step 2 Soft
+  const softCount = counts.soft;
+  ui.dsCount2.innerHTML = `${softCount} <span class="unit">/ ${target}</span>`;
+  ui.dsFill2.style.width = `${Math.min(100, (softCount / target) * 100)}%`;
+  if (st.active && st.classIndex === 1) {
+    ui.dsStatus2.className = 'ds-status ok';
+    ui.dsStatus2.textContent = `Recording SOFT/HUMAN... (${softCount}/${target}) Hold phone steady!`;
+  }
+
+  // Step 3 Opening
+  const openCount = counts.opening;
+  ui.dsCount3.innerHTML = `${openCount} <span class="unit">/ ${target}</span>`;
+  ui.dsFill3.style.width = `${Math.min(100, (openCount / target) * 100)}%`;
+  if (st.active && st.classIndex === 2) {
+    ui.dsStatus3.className = 'ds-status ok';
+    ui.dsStatus3.textContent = `Recording OPENING... (${openCount}/${target}) Hold phone steady!`;
+  }
+
+  // Summary
+  ui.dsSumWall.textContent = `${wallCount} pulses`;
+  ui.dsSumSoft.textContent = `${softCount} pulses`;
+  ui.dsSumOpen.textContent = `${openCount} pulses`;
+  ui.dsSumTotal.textContent = `${counts.total} pulses`;
+}
+
+function onDatasetStepComplete(step, count) {
+  playChime(true);
+  if (step === 1) {
+    ui.dsAction1.textContent = '✓ 50 WALL SAMPLES COLLECTED';
+    ui.dsAction1.disabled = false;
+    ui.dsStatus1.className = 'ds-status ok';
+    ui.dsStatus1.textContent = '✓ Step 1 Complete! Tap NEXT: SOFT / HUMAN →';
+    ui.dsNext1.disabled = false;
+    ui.dsStepTab1.classList.add('done');
+  } else if (step === 2) {
+    ui.dsAction2.textContent = '✓ 50 SOFT/HUMAN SAMPLES COLLECTED';
+    ui.dsAction2.disabled = false;
+    ui.dsStatus2.className = 'ds-status ok';
+    ui.dsStatus2.textContent = '✓ Step 2 Complete! Tap NEXT: OPENING →';
+    ui.dsNext2.disabled = false;
+    ui.dsStepTab2.classList.add('done');
+  } else if (step === 3) {
+    ui.dsAction3.textContent = '✓ 50 OPENING SAMPLES COLLECTED';
+    ui.dsAction3.disabled = false;
+    ui.dsStatus3.className = 'ds-status ok';
+    ui.dsStatus3.textContent = '✓ Step 3 Complete! Tap NEXT: REVIEW & SAVE →';
+    ui.dsNext3.disabled = false;
+    ui.dsStepTab3.classList.add('done');
   }
 }
 
@@ -612,12 +825,22 @@ ui.calChoices.addEventListener('click', (e) => {
   b.classList.add('on');
   ui.calDist.value = b.dataset.d;
 });
-ui.calStart.addEventListener('click', () => {
+ui.calStart.addEventListener('click', async () => {
   if (!sensor.running) {
-    ui.calStatus.className = 'cal-status err';
-    ui.calStatus.textContent = 'The scan must be running to collect calibration samples.';
-    return;
+    ui.calStatus.className = 'cal-status';
+    ui.calStatus.textContent = 'Starting acoustic chirps...';
+    const res = await sensor.start({ rateHz: 20 });
+    if (!res.ok) {
+      ui.calStatus.className = 'cal-status err';
+      ui.calStatus.textContent = 'Could not start mic: ' + res.error;
+      return;
+    }
+    state.mode = 'live';
+    net.send('set_mode', { mode: 'live' });
+    renderMode();
   }
+  sensor.resetClutter();
+
   const d = parseFloat(ui.calDist.value);
   if (!(d > 0.2 && d < 5)) {
     ui.calStatus.className = 'cal-status err';
@@ -641,6 +864,146 @@ ui.calStart.addEventListener('click', () => {
     }
   }, 250);
 });
+
+// ---- dataset collection sheet ----
+if (ui.btnDataset) {
+  ui.btnDataset.addEventListener('click', () => {
+    ui.datasetSheet.hidden = false;
+    showDatasetStep(1);
+  });
+}
+
+if (ui.dsClose) {
+  ui.dsClose.addEventListener('click', () => {
+    datasetCollector.stop();
+    ui.datasetSheet.hidden = true;
+  });
+}
+
+function showDatasetStep(step) {
+  datasetCollector.currentStep = step;
+  if (ui.dsPanel1) ui.dsPanel1.hidden = step !== 1;
+  if (ui.dsPanel2) ui.dsPanel2.hidden = step !== 2;
+  if (ui.dsPanel3) ui.dsPanel3.hidden = step !== 3;
+  if (ui.dsPanel4) ui.dsPanel4.hidden = step !== 4;
+
+  const tabs = [ui.dsStepTab1, ui.dsStepTab2, ui.dsStepTab3, ui.dsStepTab4];
+  tabs.forEach((tab, i) => {
+    if (tab) tab.classList.toggle('on', i + 1 === step);
+  });
+  renderDatasetState(datasetCollector.progress());
+}
+
+async function ensureSensorRunningForDataset() {
+  if (!sensor.running) {
+    const res = await sensor.start({ rateHz: 20 });
+    if (!res.ok) {
+      log('Could not start sensor for dataset: ' + res.error, 'error');
+      return false;
+    }
+    state.mode = 'live';
+    net.send('set_mode', { mode: 'live' });
+    renderMode();
+  }
+  sensor.resetClutter();
+  return true;
+}
+
+// Step 1: WALL
+if (ui.dsAction1) {
+  ui.dsAction1.addEventListener('click', async () => {
+    const ok = await ensureSensorRunningForDataset();
+    if (!ok) {
+      ui.dsStatus1.className = 'ds-status err';
+      ui.dsStatus1.textContent = 'Microphone permission required.';
+      return;
+    }
+    ui.dsAction1.disabled = true;
+    ui.dsAction1.textContent = 'RECORDING WALL... (HOLD STILL)';
+    datasetCollector.startStep(1);
+  });
+}
+if (ui.dsNext1) ui.dsNext1.addEventListener('click', () => showDatasetStep(2));
+
+// Step 2: SOFT / HUMAN
+if (ui.dsAction2) {
+  ui.dsAction2.addEventListener('click', async () => {
+    const ok = await ensureSensorRunningForDataset();
+    if (!ok) return;
+    ui.dsAction2.disabled = true;
+    ui.dsAction2.textContent = 'RECORDING SOFT/HUMAN...';
+    datasetCollector.startStep(2);
+  });
+}
+if (ui.dsNext2) ui.dsNext2.addEventListener('click', () => showDatasetStep(3));
+
+// Step 3: OPENING
+if (ui.dsAction3) {
+  ui.dsAction3.addEventListener('click', async () => {
+    const ok = await ensureSensorRunningForDataset();
+    if (!ok) return;
+    ui.dsAction3.disabled = true;
+    ui.dsAction3.textContent = 'RECORDING OPENING...';
+    datasetCollector.startStep(3);
+  });
+}
+if (ui.dsNext3) ui.dsNext3.addEventListener('click', () => showDatasetStep(4));
+
+// Step 4: SAVE
+if (ui.dsBtnSaveServer) {
+  ui.dsBtnSaveServer.addEventListener('click', () => {
+    const counts = datasetCollector.counts;
+    if (counts.total < 5) {
+      ui.dsStatus4.className = 'ds-status warn';
+      ui.dsStatus4.textContent = 'Collect at least a few samples first.';
+      return;
+    }
+    ui.dsStatus4.className = 'ds-status';
+    ui.dsStatus4.textContent = 'Uploading dataset to server...';
+    net.send('save_training_dataset', {
+      dataset: {
+        device: deviceInfo().platform || 'OnePlus',
+        samples: datasetCollector.samples,
+        stats: counts,
+      },
+    });
+  });
+}
+
+if (ui.dsBtnDownload) {
+  ui.dsBtnDownload.addEventListener('click', () => {
+    const counts = datasetCollector.counts;
+    const jsonStr = JSON.stringify({
+      device: deviceInfo().platform || 'OnePlus',
+      date: new Date().toISOString(),
+      stats: counts,
+      samples: datasetCollector.samples,
+    }, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `oneplus_real_echos_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    ui.dsStatus4.className = 'ds-status ok';
+    ui.dsStatus4.textContent = '✓ Downloaded dataset JSON to phone storage.';
+  });
+}
+
+if (ui.dsBtnReset) {
+  ui.dsBtnReset.addEventListener('click', () => {
+    datasetCollector.reset();
+    [ui.dsStepTab1, ui.dsStepTab2, ui.dsStepTab3, ui.dsStepTab4].forEach((t) => t && t.classList.remove('done'));
+    if (ui.dsNext1) ui.dsNext1.disabled = true;
+    if (ui.dsNext2) ui.dsNext2.disabled = true;
+    if (ui.dsNext3) ui.dsNext3.disabled = true;
+    if (ui.dsAction1) { ui.dsAction1.textContent = 'START RECORDING (WALL)'; ui.dsAction1.disabled = false; }
+    if (ui.dsAction2) { ui.dsAction2.textContent = 'START RECORDING (HUMAN/SOFT)'; ui.dsAction2.disabled = false; }
+    if (ui.dsAction3) { ui.dsAction3.textContent = 'START RECORDING (OPENING)'; ui.dsAction3.disabled = false; }
+    showDatasetStep(1);
+  });
+}
 
 // ---- first-run gate ----
 function renderGateCaps() {

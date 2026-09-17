@@ -296,3 +296,132 @@ body {
   .ro-value { font-size: 32px; }
   .scope { display: none; }
 }
+
+/* ---- training dataset collector ------------------------------------- */
+.ds-stepper {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.ds-step {
+  padding: 6px 2px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 9px;
+  text-align: center;
+  color: var(--text-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.ds-step .num {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 9px;
+}
+.ds-step.on {
+  border-color: var(--live);
+  color: var(--live);
+  background: var(--live-dim);
+}
+.ds-step.on .num {
+  background: var(--live);
+  color: #000;
+}
+.ds-step.done {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.ds-step.done .num {
+  background: var(--ok);
+  color: #000;
+}
+
+.ds-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ds-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+  align-self: flex-start;
+}
+.ds-instructions {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+  background: rgba(4, 7, 12, 0.6);
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
+.ds-instructions p { margin: 0 0 6px; }
+.ds-counter {
+  text-align: center;
+  margin: 6px 0;
+}
+.ds-count-big {
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+}
+.ds-count-big .unit {
+  font-size: 16px;
+  color: var(--text-3);
+}
+.ds-count-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: var(--text-3);
+}
+.ds-status {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
+  min-height: 24px;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+.ds-status.ok { color: var(--ok); font-weight: 700; }
+.ds-status.warn { color: var(--warn); }
+.ds-status.err { color: var(--danger); }
+
+.ds-summary-box {
+  background: rgba(4, 7, 12, 0.8);
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.ds-sum-row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-2);
+}
+.ds-sum-row b {
+  color: var(--text);
+}
+

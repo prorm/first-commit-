@@ -292,16 +292,19 @@ export class DetectionPipeline {
   }
 
   emptyResult(reason, directIdx, directVal, det) {
+    const peakIdx = det ? det.idx : -1;
+    const rawRange = (peakIdx > 0) ? (peakIdx / this.fs) * SPEED_OF_SOUND * 0.5 : null;
     return {
       detection: null,
       diagnostics: {
         directIdx, directVal,
-        peakIdx: det ? det.idx : -1,
+        peakIdx,
+        rawRange,
         noiseFloor: this.noiseFloor,
         snrDb: det ? det.snrDb : 0,
         cfarPass: false,
         reason,
-        window: null,
+        window: (peakIdx > 0) ? this.extractWindow(peakIdx) : null,
       },
     };
   }

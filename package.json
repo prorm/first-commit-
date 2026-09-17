@@ -12,7 +12,8 @@
     "lint": "node --experimental-vm-modules scripts/check-syntax.js",
     "verify": "npm run lint && npm test && node scripts/browser-check.mjs",
     "eval": "node scripts/verify-classifier.mjs && node scripts/eval-reconstruction.js && node scripts/window-stats.mjs",
-    "browser": "node scripts/browser-check.mjs"
+    "browser": "node scripts/browser-check.mjs",
+    "train-real": "node scripts/train-real.mjs"
   },
   "engines": {
     "node": ">=18"
