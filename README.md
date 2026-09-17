@@ -37,7 +37,7 @@ In low-visibility tactical or search-and-rescue situations (thick smoke, total b
 
 1. **Emission:** Phone speaker transmits near-ultrasonic linear frequency modulated (LFM) chirps (17.5 kHz → 22 kHz, 15 ms duration, Hann-windowed).
 2. **On-Device DSP:** Phone microphone captures raw audio; an analytic matched filter computes the pulse envelope, removes clutter across 40 pulses, and runs Cell-Averaging CFAR (Constant False Alarm Rate) detection to lock targets with sub-5 cm accuracy.
-3. **Edge Neural Classification (EchoNet):** A compact 2,339-parameter neural network classifies each return window into `WALL`, `SOFT` (curtains/furniture), or `OPENING` (doorways/voids).
+3. **Edge Neural Classification (EchoNet) — experimental:** A compact 2,339-parameter neural network labels each return window `WALL` or `SOFT` (curtains/furniture/bodies). It is the one part of the stack that is not a measurement: on real recordings held out by session it scores 39% against a 33% chance floor. Openings are **not** classified — they are recovered geometrically, as door-width gaps in reconstructed wall.
 4. **Spatial Fusion & Mapping:** Detections are streamed via WebSockets to a command center, updating a Bayesian log-odds occupancy grid and running Total Least Squares (TLS) surface reconstruction to fit walls, detect corners, and outline rooms.
 
 ---
@@ -323,7 +323,14 @@ node scripts/verify-classifier.mjs
 node scripts/window-stats.mjs
 ```
 
-> **Note on Classification Honesty:** In synthetic validation, EchoNet scores **91% on WALL**, **74% on SOFT**, and **43% on OPENING** (69.5% overall). Openings are inherently harder due to wide-beam diffraction. Because of this, the UI intentionally tags openings as `OPENING?` with capped confidence rather than overpromising.
+**Diagnose the dataset before training on it:**
+```bash
+C:/path/to/python313/python.exe scripts/diagnose-dataset.py
+```
+
+> **Note on Classification Honesty:** EchoNet's synthetic validation score (69.5%) does not survive contact with real echoes. Held out by whole recording session, the model scores **39% against a 33% chance floor**, and a 300-tree random forest given the same windows plus range and SNR reaches only 39.4% — so that is the dataset's ceiling, not a model-capacity limit. `scripts/diagnose-dataset.py` reports why: the 5,250 collected pulses are really **30 contiguous bursts** of ~175 near-identical pulses, `range_m` alone predicts the label at 37.8% because each class was recorded at its own standoff, and pulses labelled OPENING carry the *highest* spreading-compensated target strength of any class — physically backwards for a hole in a wall, and a direct sign the detector was locking onto the far wall behind the doorway.
+>
+> The system responds by scoping the classifier down rather than dressing the number up. EchoNet now decides **WALL vs SOFT only** ([`public/shared/surfaceclass.mjs`](public/shared/surfaceclass.mjs)), and says nothing when the two are too close to separate. Openings come from [`findGapOpenings()`](public/shared/reconstruct.mjs) — a door-width gap in an otherwise continuous run of reconstructed wall, which is evidence this sensor can actually produce. Both UIs tag the class panel `EXPERIMENTAL`. Range, closing velocity, TTC and the reconstruction do not depend on the classifier at all.
 
 ---
 
@@ -373,7 +380,7 @@ Every metric below is backed by automated tests in this repository:
 | **Empty-Room False Alarm Rate** | **0.0%** | CFAR noise floor test (100% rejection of noise) |
 | **Reconstructed Surface Fit** | **3.0 cm mean error** | `scripts/eval-reconstruction.js` (worst case: 0.39 m) |
 | **Reconstruction Confidence** | **72% mean** | Evaluated across 5 test scenarios |
-| **EchoNet Accuracy** | **69.5% overall** | WALL: 91.5%, SOFT: 74.3%, OPENING: 42.7% |
+| **EchoNet Accuracy (real echoes)** | **39%** vs 33% chance | Session-held-out, `scripts/diagnose-dataset.py`. Experimental; WALL/SOFT only |
 | **Zero-Visibility Rendering** | **100% acoustic** | `public/map/renderer.mjs` |
 
 ---

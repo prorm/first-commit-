@@ -134,9 +134,13 @@
 <p class="note">
   <b>Research prototype.</b> Ranges are estimated from a single-element sensor with a
   wide beam; bearing is the phone's boresight, not a resolved angle; position is
-  dead-reckoned, not surveyed; and the echo classifier scores 69.5&nbsp;% on synthetic
-  validation (WALL 91&nbsp;%, SOFT 74&nbsp;%, OPENING 43&nbsp;%). Not a navigation or
-  safety device, and no smoke-penetration or collision-avoidance claims are made.
+  dead-reckoned, not surveyed; and the echo classifier is experimental — on real
+  recordings held out by session it scores 39&nbsp;% against a 33&nbsp;% chance
+  floor, so surface labels are suggestive only. Range, closing velocity and
+  time-to-contact are measured; the class is not. Openings are found
+  geometrically, as door-width gaps in reconstructed wall, not by the
+  classifier. Not a navigation or safety device, and no smoke-penetration or
+  collision-avoidance claims are made.
 </p>
 
 <div class="docs">

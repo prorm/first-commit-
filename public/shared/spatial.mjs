@@ -10,6 +10,7 @@
  */
 
 import { CLASSES, clamp01, wrapDeg, angleDelta, polarToWorld } from './protocol.mjs';
+import { surfaceFromProbs } from './surfaceclass.mjs';
 
 export const DEFAULTS = {
   cell: 0.10,            // [m]  occupancy grid resolution
@@ -178,12 +179,15 @@ export class OccupancyGrid {
 /**
  * Confidence-weighted class fusion over a short temporal window.
  *
- * Why this exists: EchoNet's per-echo accuracy is 69.5 % on synthetic
- * validation (WALL recall 91 %, SOFT 74 %, OPENING 43 %).  A single echo is
- * therefore not a decision.  Fusing consecutive looks at the *same place*
- * suppresses flicker without inventing certainty: the fused confidence is the
- * mean posterior, so a class that keeps winning narrowly stays reported as
- * low-confidence rather than being rounded up to a clean answer.
+ * Why this exists: EchoNet is a weak per-echo classifier.  On real recordings
+ * held out by session it scores 39 % against a 33 % chance floor, so a single
+ * echo is emphatically not a decision.  Fusing consecutive looks at the *same
+ * place* suppresses flicker without inventing certainty: the fused confidence
+ * is the mean posterior, so a class that keeps winning narrowly stays reported
+ * as low-confidence rather than being rounded up to a clean answer.
+ *
+ * The fused call is WALL vs SOFT. Openings are geometry, not texture, and come
+ * from findGapOpenings() in reconstruct.mjs.
  */
 export class ClassFuser {
   constructor(opts = {}) {
@@ -234,17 +238,23 @@ export class ClassFuser {
     }
     if (wsum > 0) for (let i = 0; i < 3; i++) acc[i] /= wsum;
 
-    let best = 0;
-    for (let i = 1; i < 3; i++) if (acc[i] > acc[best]) best = i;
+    // The fused call is WALL vs SOFT only. Taking the three-way argmax here
+    // would reintroduce OPENING after the sensor had already declined to
+    // assert it — the fuser must not be able to conjure a class the pipeline
+    // refused to emit. See shared/surfaceclass.mjs.
+    const fused = surfaceFromProbs(acc);
     const history = track.samples.map((s) => {
-      let b = 0;
-      for (let i = 1; i < 3; i++) if (s.probs[i] > s.probs[b]) b = i;
-      return b === best ? s.probs[best] : -s.probs[b];   // sign marks disagreement
+      const call = surfaceFromProbs(s.probs);
+      return call.className && call.className === fused.className
+        ? call.confidence
+        : -call.confidence;                 // sign marks disagreement
     });
-    const agree = track.samples.filter((s) => argmax(s.probs) === best).length;
+    const agree = track.samples.filter(
+      (s) => surfaceFromProbs(s.probs).className === fused.className
+    ).length;
     return {
-      className: acc[best] > 0 ? CLASSES[best] : null,
-      confidence: clamp01(acc[best]),
+      className: fused.className,
+      confidence: clamp01(fused.confidence),
       probs: acc,
       history: history.slice(-12),
       support: track.samples.length,

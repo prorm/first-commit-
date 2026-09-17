@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import crypto from 'node:crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -124,6 +125,7 @@ function loadAllRealDatasets(specificPath) {
   );
 
   const seen = new Set();
+  const sessionHashes = new Map();
   const samples = [];
   const loadedFiles = [];
 
@@ -131,24 +133,97 @@ function loadAllRealDatasets(specificPath) {
     try {
       const fullPath = path.join(RECORDINGS_DIR, f);
       const data = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
-      if (Array.isArray(data.samples)) {
-        let addedFromThis = 0;
-        for (const s of data.samples) {
-          const id = s.t ? `${s.t}_${s.classIndex}` : (Array.isArray(s.window) ? s.window.slice(0, 8).join(',') : null);
-          if (id && !seen.has(id)) {
-            seen.add(id);
-            samples.push(s);
-            addedFromThis++;
-          }
-        }
-        loadedFiles.push(`${f} (${addedFromThis} unique pulses)`);
+      if (!Array.isArray(data.samples)) continue;
+
+      // A re-saved session is the same room, the same pose and the same pulses.
+      // Keeping both copies puts identical windows on both sides of the holdout
+      // split and reports a score the model did not earn.
+      const digest = crypto.createHash('md5')
+        .update(data.samples.map((s) => (s.window || []).join(',')).join('|'))
+        .digest('hex');
+      if (sessionHashes.has(digest)) {
+        loadedFiles.push(`${f} (SKIPPED - byte-identical to ${sessionHashes.get(digest)})`);
+        continue;
       }
+      sessionHashes.set(digest, f);
+
+      let addedFromThis = 0;
+      for (const s of data.samples) {
+        const id = s.t ? `${s.t}_${s.classIndex}` : (Array.isArray(s.window) ? s.window.slice(0, 8).join(',') : null);
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          samples.push({ ...s, session: f, device: data.device || 'unknown' });
+          addedFromThis++;
+        }
+      }
+      loadedFiles.push(`${f} (${addedFromThis} unique pulses, device ${data.device || 'unknown'})`);
     } catch (e) {
       /* skip invalid file */
     }
   }
 
   return { files: loadedFiles, samples };
+}
+
+/**
+ * Split by session, never by pulse.
+ *
+ * Each class in a session is one contiguous burst of pulses 50 ms apart with
+ * the phone held still, so consecutive pulses are near-copies of each other.
+ * A per-pulse shuffle puts those copies on both sides of the split and scores
+ * memorisation as generalisation: on this dataset that reads ~62% where the
+ * honest number is ~37%. Holding out whole sessions is the only split that
+ * measures what we care about — a new room, a new phone, a new operator.
+ */
+function splitBySession(samples, holdoutFraction) {
+  const bySession = new Map();
+  for (const s of samples) {
+    if (!bySession.has(s.session)) bySession.set(s.session, []);
+    bySession.get(s.session).push(s);
+  }
+  const sessions = [...bySession.keys()].sort();
+  const nHold = Math.max(1, Math.round(sessions.length * holdoutFraction));
+  // Deterministic: hold out every k-th session so the split is reproducible
+  // across runs and devices stay mixed across both sides.
+  const step = sessions.length / nHold;
+  const holdSet = new Set();
+  for (let i = 0; i < nHold; i++) holdSet.add(sessions[Math.floor(i * step + step / 2)]);
+
+  const toBins = (list) => {
+    const bins = [[], [], []];
+    for (const s of list) {
+      if (s.classIndex >= 0 && s.classIndex <= 2 && Array.isArray(s.window) && s.window.length === 64) {
+        bins[s.classIndex].push(new Float32Array(s.window));
+      }
+    }
+    return bins;
+  };
+
+  const trainSamples = [];
+  const holdSamples = [];
+  for (const [name, list] of bySession) (holdSet.has(name) ? holdSamples : trainSamples).push(...list);
+
+  return {
+    trainBins: toBins(trainSamples),
+    holdBins: toBins(holdSamples),
+    trainSessions: sessions.filter((s) => !holdSet.has(s)),
+    holdSessions: [...holdSet],
+  };
+}
+
+/** Confusion matrix + accuracy for one model over class-binned windows. */
+function evaluate(bins, W) {
+  const cm = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  let correct = 0, total = 0;
+  for (let ci = 0; ci < 3; ci++) {
+    for (const win of bins[ci]) {
+      const out = W ? forwardModel(win, W) : EchoNet.forward(win);
+      cm[ci][out.classIndex]++;
+      if (out.classIndex === ci) correct++;
+      total++;
+    }
+  }
+  return { cm, correct, total, acc: total ? (correct / total) * 100 : 0 };
 }
 
 async function main() {
@@ -172,36 +247,31 @@ async function main() {
     process.exit(1);
   }
 
-  const classSamples = [[], [], []];
-  for (const s of samples) {
-    if (s.classIndex >= 0 && s.classIndex <= 2 && Array.isArray(s.window) && s.window.length === 64) {
-      classSamples[s.classIndex].push(new Float32Array(s.window));
-    }
-  }
+  const { trainBins, holdBins, trainSessions, holdSessions } = splitBySession(samples, 0.3);
+  const classSamples = trainBins;
 
-  console.log('Class Breakdown (Real Hardware Echoes):');
+  console.log('Session-grouped split (whole sessions held out, never single pulses):');
+  console.log(`  train:   ${trainSessions.length} sessions, ${trainBins.reduce((a, b) => a + b.length, 0)} pulses`);
+  console.log(`  holdout: ${holdSessions.length} sessions, ${holdBins.reduce((a, b) => a + b.length, 0)} pulses`);
+  holdSessions.forEach((s) => console.log(`             - ${s}`));
+  console.log('');
+
+  console.log('Class Breakdown (train / holdout):');
   CLASSES.forEach((name, i) => {
-    console.log(`  Class ${i} (${name.padEnd(7)}): ${classSamples[i].length} real samples`);
+    console.log(`  Class ${i} (${name.padEnd(7)}): ${trainBins[i].length} train / ${holdBins[i].length} holdout`);
   });
   console.log('');
 
-  // 1. Evaluate baseline on real OnePlus data
-  console.log('--- 1. BASELINE EVALUATION (Current model on real OnePlus data) ---');
-  const baseCm = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-  let baseCorrect = 0;
-  let totalEval = 0;
-
-  for (let ci = 0; ci < 3; ci++) {
-    for (const win of classSamples[ci]) {
-      const out = EchoNet.forward(win);
-      baseCm[ci][out.classIndex]++;
-      if (out.classIndex === ci) baseCorrect++;
-      totalEval++;
-    }
+  if (holdBins.reduce((a, b) => a + b.length, 0) === 0) {
+    console.error('[Error] Holdout split is empty - need at least two distinct sessions.');
+    process.exit(1);
   }
 
-  printConfusion(baseCm, classSamples.map((s) => s.length));
-  console.log(`Baseline Real Accuracy: ${((baseCorrect / totalEval) * 100).toFixed(1)} %\n`);
+  // 1. Evaluate baseline on the held-out sessions
+  console.log('--- 1. BASELINE EVALUATION (Current model, held-out sessions) ---');
+  const base = evaluate(holdBins, null);
+  printConfusion(base.cm, holdBins.map((s) => s.length));
+  console.log(`Baseline Holdout Accuracy: ${base.acc.toFixed(1)} %  (chance 33.3 %)\n`);
 
   // 2. Training configuration
   let synthPulses = [];
@@ -248,26 +318,38 @@ async function main() {
   const W_base = EchoNet.W;
   const updatedW = fineTune(W_base, classSamples, synthPulses);
 
-  // 4. Evaluate fine-tuned model on real OnePlus data
-  console.log('\n--- 4. POST-TRAINING EVALUATION ON REAL DATA ---');
-  const newCm = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-  let newCorrect = 0;
+  // 4. Evaluate the fine-tuned model on the held-out sessions, and on its own
+  //    training split, so the gap between the two is visible.
+  console.log('\n--- 4. POST-TRAINING EVALUATION ---');
+  const onTrain = evaluate(trainBins, updatedW);
+  const onHold = evaluate(holdBins, updatedW);
 
-  for (let ci = 0; ci < 3; ci++) {
-    for (const win of classSamples[ci]) {
-      const out = forwardModel(win, updatedW);
-      newCm[ci][out.classIndex]++;
-      if (out.classIndex === ci) newCorrect++;
-    }
+  console.log('Held-out sessions (the number that counts):');
+  printConfusion(onHold.cm, holdBins.map((s) => s.length));
+  const newAcc = onHold.acc;
+  const delta = newAcc - base.acc;
+  console.log(`Holdout Accuracy:  ${newAcc.toFixed(1)} %  (baseline ${base.acc.toFixed(1)} %, ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} pts, chance 33.3 %)`);
+  console.log(`Train Accuracy:    ${onTrain.acc.toFixed(1)} %  (gap ${(onTrain.acc - newAcc).toFixed(1)} pts - a large gap is memorised sessions, not learning)`);
+  if (newAcc < 40) {
+    console.log('\n[Warning] Holdout accuracy is near chance. That is a dataset problem,');
+    console.log('          not a hyperparameter problem - run scripts/diagnose-dataset.py.');
   }
 
-  printConfusion(newCm, classSamples.map((s) => s.length));
-  const newAcc = (newCorrect / totalEval) * 100;
-  console.log(`New Real Accuracy: ${newAcc.toFixed(1)} % (${newAcc > (baseCorrect / totalEval) * 100 ? '▲ SIGNIFICANT IMPROVEMENT' : 'STABLE'})\n`);
-
-  // 5. Export updated weights
+  // 5. Export updated weights - but only if they actually beat what is
+  //    already shipped on unseen sessions. Overwriting good weights with a
+  //    run that only memorised its training sessions is how the model got
+  //    worse the last time round.
   console.log('--- 5. EXPORTING CALIBRATED WEIGHTS ---');
-  exportWeightsJs(updatedW, newAcc, newCm);
+  const forceExport = args.includes('--force-export');
+  if (newAcc < base.acc && !forceExport) {
+    console.log(`SKIPPED: holdout accuracy regressed ${base.acc.toFixed(1)} % -> ${newAcc.toFixed(1)} %.`);
+    console.log('Shipped weights left untouched. Pass --force-export to overwrite anyway.');
+    const st = EchoNet.selfTest();
+    console.log(`
+Self-test verification (shipped weights): ${st.ok ? 'PASS' : 'FAIL'} (maxAbsError ${st.maxAbsError})`);
+    return;
+  }
+  exportWeightsJs(updatedW, newAcc, onHold.cm);
   console.log('✓ Successfully exported updated weights to:');
   console.log(`  - ${SRC_WEIGHTS}`);
   console.log(`  - ${VENDOR_WEIGHTS}`);
@@ -493,6 +575,9 @@ function exportWeightsJs(W, valAcc, cm) {
   const META = {
     "generated_utc": "${new Date().toISOString()}",
     "val_accuracy": ${(valAcc / 100).toFixed(4)},
+    "accuracy_basis": "Held out by whole recording session - never by single pulse, because each class in a session is one contiguous burst of near-identical pulses. Chance is ${(100 / CLASSES.length).toFixed(1)}%. See scripts/diagnose-dataset.py.",
+    "classes_in_use": ["WALL", "SOFT"],
+    "unused_head": "OPENING - an opening is the absence of a return, not a texture; recovered geometrically in reconstruct.mjs instead. See public/shared/surfaceclass.mjs.",
     "n_params": 2339,
     "fs_hz": 48000.0,
     "f0_hz": 17500.0,

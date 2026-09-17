@@ -16,6 +16,7 @@
 const { createRequire } = require('node:module');
 const { synthesizePulse, makeDeviceResponse, samplesToRange } = require('../public/shared/echosynth.mjs');
 const { makePose, wrapDeg, clamp01, normalizeDetection } = require('../public/shared/protocol.mjs');
+const { surfaceFromProbs } = require('../public/shared/surfaceclass.mjs');
 
 const requireCjs = createRequire(__filename);
 let EchoNet = null;
@@ -300,15 +301,18 @@ class SimulationEngine {
       beyond: hit.kind === 'OPENING' ? this.beyondRange(pose, hit) : undefined,
     });
 
-    // Real classifier, real output — including its mistakes.
+    // Real classifier, real output — including its mistakes.  Collapsed to
+    // WALL/SOFT through the same rule the phone uses, so the twin cannot
+    // report a class the live sensor would never emit.
     let probs = [0, 0, 0];
     let className = null;
     let classConfidence = 0;
     if (EchoNet) {
       const out = EchoNet.forward(pulse.win);
       probs = Array.from(out.probs);
-      className = out.className;
-      classConfidence = out.confidence;
+      const surface = surfaceFromProbs(probs);
+      className = surface.className;
+      classConfidence = surface.confidence;
     }
 
     // Closing velocity from consecutive ranges, as the live tracker computes it.

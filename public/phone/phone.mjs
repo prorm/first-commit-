@@ -1065,7 +1065,9 @@ async function enableSensors() {
     const st = EchoNet.selfTest();
     state.classifierReady = st.ok;
     log('EchoNet self-test ' + (st.ok ? 'passed' : 'FAILED') + ' (' + EchoNet.META.n_params
-      + ' params, synthetic val ' + (EchoNet.META.val_accuracy * 100).toFixed(1) + '%).', st.ok ? 'success' : 'error');
+      + ' params, ' + (EchoNet.META.classes_in_use || ['WALL', 'SOFT']).join('/')
+      + ' only, ' + (EchoNet.META.val_accuracy * 100).toFixed(0)
+      + '% on real echoes vs 50% chance - experimental).', st.ok ? 'success' : 'error');
   } else {
     log('EchoNet not loaded — ranges still work, classification will not.', 'warn');
   }

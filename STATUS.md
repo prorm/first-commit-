@@ -84,7 +84,10 @@ node scripts/window-stats.mjs       simulated vs. real training windows
 - Classifier behaviour on the twin vs. at training time
   (`verify-classifier.mjs`): WALL 96.9% vs 91.5%, SOFT 72.6% vs 74.3%,
   OPENING 47.4% vs 42.7%, overall 72.3% vs 69.5% — same class-difficulty
-  ordering, within a few points.
+  ordering, within a few points. Both figures are synthetic-on-synthetic and
+  neither survives real echoes; see the real-echo entry under Known limits.
+  The twin now routes its classifier output through the same WALL/SOFT rule the
+  phone uses, so it cannot report a class the live sensor would never emit.
 - **Deterministic**: same seed, same scan, bit for bit.
 - Works with no phone, no microphone, no network, no credentials.
 
@@ -206,8 +209,23 @@ but it is not a proper inverse sensor model.
 - **TDOA bearing from stereo capture.** Stereo availability is detected and
   reported; the estimator is not implemented. Every detection carries
   `beamwidth_deg: 30` and the UI draws that uncertainty instead.
-- **Real-echo validation of the classifier.** EchoNet has only ever been
-  validated on synthetic data.
+- **Real-echo validation of the classifier.** Now measured, and it does not
+  hold up. Across the 10 real recording sessions in `recordings/`, held out by
+  whole session, the shipped model scores **39.1%** against a 33.3% chance
+  floor, and fine-tuning on that data drops it to 37.7%. A 300-tree random
+  forest reaches at best 39.4% under the same split (over raw windows, hand-built
+  shape features, range, SNR and spreading-compensated target strength, alone
+  and combined), so this is the dataset's ceiling, not a model-capacity limit. Earlier
+  runs reported 43.4% by evaluating on their own training pulses.
+  Three causes, measured by `scripts/diagnose-dataset.py`:
+  the 5,250 pulses are 30 contiguous bursts (~175 near-identical pulses each),
+  so the real sample size is 30; `range_m` alone predicts the label at 37.8%
+  because each class was collected at its own standoff (WALL 1.38 m, SOFT
+  1.04 m, OPENING 1.89 m); and OPENING carries the *highest* spreading-
+  compensated target strength (23.7 dB vs WALL's 18.2 dB), meaning CFAR locked
+  onto the wall behind the opening rather than the opening itself.
+  Treat `obstacleClass` as experimental. Range, velocity and TTC do not
+  depend on it.
 - **Loop closure / pose graph.** Dead-reckoning drift is displayed, never
   corrected.
 - **Multi-phone fusion.** The hub supports multiple sockets but only one
@@ -228,11 +246,14 @@ These are properties of the approach, not defects to be fixed later.
    microphone cannot resolve direction.
 3. **Position is dead-reckoned or simulated**, never surveyed. Error grows with
    distance walked.
-4. **The classifier is 69.5% accurate** on synthetic validation:
-   WALL 91%, SOFT 74%, **OPENING 43%**. Its training set is synthetic.
-   The system responds by fusing over time, showing disagreement, capping
-   OPENING confidence at 0.6, labelling openings `OPENING?` with their evidence
-   type, and hedging speech. It does not respond by rounding up.
+4. **The classifier is experimental and weak.** 69.5% on synthetic validation,
+   but **39% on real echoes held out by session**, against a 33% chance floor.
+   The system responds by scoping it down, not by rounding up: EchoNet decides
+   **WALL vs SOFT only** and returns no call when the two cannot be separated;
+   openings are geometric, not acoustic; results are fused over time with
+   disagreement shown; both UIs tag the class panel `EXPERIMENTAL`; and no
+   spoken cue is caused by the classifier — every cue is triggered by range,
+   velocity or TTC, with the class at most changing the noun.
 5. **Reconstruction is inference.** The 3.0 cm figure is fit-to-truth error in
    simulation, not survey accuracy, and it only covers boundary the beam
    actually swept.

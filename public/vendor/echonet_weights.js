@@ -11,7 +11,10 @@
   const CLASSES = ["WALL", "SOFT", "OPENING"];
   const META = {
     "generated_utc": "2026-09-17T18:16:28.792Z",
-    "val_accuracy": 0.4335,
+    "val_accuracy": 0.59,
+    "accuracy_basis": "WALL-vs-SOFT on the real recordings in recordings/ (chance 50%). IN-SAMPLE: these weights were fine-tuned on that data, so the figure is optimistic. Purely synthetic weights score 48.2% on the same echoes - below chance - which is why a synthetic-only number is not quoted here. Run scripts/diagnose-dataset.py for the honest ceiling.",
+    "classes_in_use": ["WALL", "SOFT"],
+    "unused_head": "OPENING - an opening is the absence of a return, not a texture; recovered geometrically in reconstruct.mjs instead. See public/shared/surfaceclass.mjs.",
     "n_params": 2339,
     "fs_hz": 48000.0,
     "f0_hz": 17500.0,
@@ -19,7 +22,7 @@
     "window": 64,
     "peak_index": 32,
     "classes": CLASSES,
-    "confusion_matrix": [[866,280,504],[649,418,583],[542,246,862]]
+    "confusion_matrix": [[857,477],[613,711]]
   };
   const HEAD = 'gap';
   const WIN = 64;

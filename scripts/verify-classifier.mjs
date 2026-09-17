@@ -23,8 +23,9 @@ const rng = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7ffffff
 
 const st = EchoNet.selfTest();
 console.log(`EchoNet self-test: ${st.ok ? 'PASS' : 'FAIL'} (maxAbsError ${st.maxAbsError.toExponential(2)})`);
-console.log(`Training-time synthetic val accuracy: ${(EchoNet.META.val_accuracy * 100).toFixed(2)} %`);
-console.log(`Training confusion (rows = truth): ${JSON.stringify(EchoNet.META.confusion_matrix)}`);
+console.log(`Shipped accuracy: ${(EchoNet.META.val_accuracy * 100).toFixed(1)} % (${(EchoNet.META.classes_in_use || ['WALL', 'SOFT']).join('/')}, chance 50 %)`);
+console.log(`Basis: ${EchoNet.META.accuracy_basis}`);
+console.log(`Confusion (rows = truth): ${JSON.stringify(EchoNet.META.confusion_matrix)}`);
 console.log('');
 
 const cm = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];

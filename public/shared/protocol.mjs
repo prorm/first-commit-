@@ -10,10 +10,18 @@
  * Shared verbatim by the Node server (ESM import) and both browser clients.
  */
 
+import { surfaceFromProbs } from './surfaceclass.mjs';
+
 export const PROTOCOL_VERSION = 1;
 
 export const ROLES = ['phone', 'map', 'diagnostics'];
 export const MODES = ['live', 'simulation', 'hybrid', 'replay'];
+/**
+ * The class vocabulary accepted on the wire. OPENING stays in the list so
+ * recordings captured before openings moved to the geometry layer still
+ * replay, but nothing in the live path derives it any more — see
+ * shared/surfaceclass.mjs.
+ */
 export const CLASSES = ['WALL', 'SOFT', 'OPENING'];
 
 /** Every message type on the wire, with its direction and purpose. */
@@ -112,6 +120,8 @@ export function normalizeDetection(raw, fallbackSource = 'live') {
   const pose = makePose(raw.phone || raw.pose);
   const bearing = wrapDeg(num(raw.bearing_deg, pose.heading));
   const probs = normalizeProbs(raw.classProbs);
+  // An explicit obstacleClass is honoured as sent (so archived OPENING frames
+  // replay unchanged); an absent one is derived under the two-class rule.
   const cls = CLASSES.includes(raw.obstacleClass) ? raw.obstacleClass : classFromProbs(probs);
   const vel = clampRange(num(raw.vel_mps, 0), -5, 5);
   const world = polarToWorld(pose, bearing, range);
@@ -207,10 +217,13 @@ function normalizeProbs(p) {
   return out;
 }
 
+/**
+ * Derive a class when the sender did not name one.
+ *
+ * This deliberately does NOT take the three-way argmax. Doing so let the
+ * discarded OPENING head back in through the side door: a sender that had
+ * already declined to call a class would have one invented for it here.
+ */
 function classFromProbs(p) {
-  const s = p[0] + p[1] + p[2];
-  if (!(s > 0)) return null;
-  let best = 0;
-  for (let i = 1; i < 3; i++) if (p[i] > p[best]) best = i;
-  return CLASSES[best];
+  return surfaceFromProbs(p).className;
 }

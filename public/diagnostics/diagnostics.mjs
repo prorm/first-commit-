@@ -128,11 +128,12 @@ function renderClassifier() {
       'Max abs error vs the PyTorch reference: ' + st.maxAbsError.toExponential(2)),
     row('Parameters', String(meta.n_params), 'info'),
     row('Input', meta.window + ' samples, peak at ' + meta.peak_index, 'info'),
-    row('Synthetic val accuracy', (meta.val_accuracy * 100).toFixed(2) + '%', 'warn'),
-    row('WALL recall', (recall[0] * 100).toFixed(0) + '%', 'ok'),
-    row('SOFT recall', (recall[1] * 100).toFixed(0) + '%', 'warn'),
-    row('OPENING recall', (recall[2] * 100).toFixed(0) + '%', 'err',
-      'This is the model\'s known weak class. The UI marks OPENING calls as candidates and caps their confidence; do not present them as confirmed doorways.'),
+    row('Real-echo accuracy', (meta.val_accuracy * 100).toFixed(0) + '% vs 50% chance', 'warn',
+      meta.accuracy_basis || 'See META.accuracy_basis.'),
+    row('Heads in use', (meta.classes_in_use || ['WALL', 'SOFT']).join(', '), 'info',
+      meta.unused_head || 'Openings come from wall-gap geometry in reconstruct.mjs, not from the classifier.'),
+    row('WALL recall (real)', (recall[0] * 100).toFixed(0) + '%', 'warn'),
+    row('SOFT recall (real)', (recall[1] * 100).toFixed(0) + '%', 'warn'),
     row('Trained for', meta.f0_hz / 1000 + '-' + meta.f1_hz / 1000 + ' kHz @ ' + meta.fs_hz / 1000 + ' kHz', 'info'),
   ].join('');
 }

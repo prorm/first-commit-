@@ -13,6 +13,7 @@ import { WsClient } from '../shared/wsclient.mjs';
 import { OccupancyGrid, PointCloud, Trajectory } from '../shared/spatial.mjs';
 import { reconstruct } from '../shared/reconstruct.mjs';
 import { CLASSES, makePose } from '../shared/protocol.mjs';
+import { SURFACE_CLASSES } from '../shared/surfaceclass.mjs';
 import { MapRenderer, worldBounds, CLASS_RGB } from './renderer.mjs';
 
 const $ = (id) => document.getElementById(id);
@@ -293,7 +294,8 @@ function applyCapabilities(caps) {
   world.caps = caps;
   const meta = caps.classifierMeta;
   ui.aiMeta.textContent = meta
-    ? 'EchoNet · ' + meta.n_params + ' params · val ' + (meta.val_accuracy * 100).toFixed(1) + '%'
+    ? 'EchoNet · ' + meta.n_params + ' params · ' + (meta.classes_in_use || ['WALL', 'SOFT']).join('/')
+      + ' · ' + (meta.val_accuracy * 100).toFixed(0) + '% real (chance 50%)'
     : caps.classifier === 'loaded' ? 'EchoNet loaded' : 'classifier unavailable';
 }
 
@@ -364,8 +366,13 @@ function renderReconLine() {
 /** The AI panel: the model's own numbers, with its uncertainty visible. */
 function renderAi(det) {
   if (ui.aiProbs.childElementCount !== 3) {
+    // All three heads are shown because they are what the network actually
+    // emitted, but only WALL and SOFT can win: the third is marked UNUSED so
+    // nobody reads a high OPENING bar as a doorway call. See surfaceclass.mjs.
     ui.aiProbs.innerHTML = CLASSES.map((c) =>
-      '<div class="arow" data-c="' + c + '"><span class="aname c-' + c + '">' + c
+      '<div class="arow' + (SURFACE_CLASSES.includes(c) ? '' : ' unused')
+      + '" data-c="' + c + '"><span class="aname c-' + c + '">' + c
+      + (SURFACE_CLASSES.includes(c) ? '' : ' <em>unused</em>')
       + '</span><span class="abar"><i></i></span><span class="aval">0.00</span></div>').join('');
   }
   if (!det) {
@@ -410,8 +417,9 @@ function renderAi(det) {
 
   const conf = det.fusedConfidence || det.classConfidence || 0;
   const support = det.fusedSupport || 1;
-  if (cls === 'OPENING') {
-    ui.aiNote.textContent = 'OPENING is the model\'s weakest class (43 % recall in synthetic validation). Treat as a candidate, not a confirmed doorway.';
+  if (!cls) {
+    ui.aiNote.textContent = 'No call: WALL and SOFT are too close to separate on this echo. '
+      + 'Range, velocity and TTC are measured and unaffected.';
     ui.aiNote.classList.add('warn');
   } else if (!det.fusedStable) {
     ui.aiNote.textContent = 'Unstable: ' + support + ' echo' + (support === 1 ? '' : 'es')
@@ -551,7 +559,7 @@ function showSummary(msg) {
     ['DURATION', Math.round((s.elapsedMs || 0) / 1000) + ' s'],
     ['DETECTIONS', String(s.detections)],
     ['CFAR PASS RATE', Math.round((s.cfarRate || 0) * 100) + '%'],
-    ['WALL / SOFT / OPENING', s.classCounts.WALL + ' / ' + s.classCounts.SOFT + ' / ' + s.classCounts.OPENING],
+    ['WALL / SOFT (experimental)', s.classCounts.WALL + ' / ' + s.classCounts.SOFT],
     ['MEAN CLASS CONFIDENCE', Math.round((s.avgClassConfidence || 0) * 100) + '%'],
     ['RANGE SPAN', (s.minRange != null ? s.minRange.toFixed(2) : '--') + ' – ' + (s.maxRange != null ? s.maxRange.toFixed(2) : '--') + ' m'],
     ['AREA OBSERVED', ((s.freeArea || 0) + (s.occupiedArea || 0)).toFixed(1) + ' m²'],
@@ -664,6 +672,11 @@ setInterval(renderStats, 500);
 
 if (EchoNet) {
   const st = EchoNet.selfTest();
-  ui.aiMeta.textContent = 'EchoNet · ' + EchoNet.META.n_params + ' params · val '
-    + (EchoNet.META.val_accuracy * 100).toFixed(1) + '%' + (st.ok ? '' : ' · SELF-TEST FAILED');
+  // The accuracy shown is the real-echo one from META, quoted against its own
+  // chance floor so it cannot be mistaken for a 90-percent-style claim. See
+  // META.accuracy_basis for what it is and is not.
+  ui.aiMeta.textContent = 'EchoNet · ' + EchoNet.META.n_params + ' params · '
+    + (EchoNet.META.classes_in_use || ['WALL', 'SOFT']).join('/') + ' · '
+    + (EchoNet.META.val_accuracy * 100).toFixed(0) + '% real (chance 50%)'
+    + (st.ok ? '' : ' · SELF-TEST FAILED');
 }

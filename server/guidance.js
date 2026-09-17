@@ -7,9 +7,12 @@
  * Two rules do most of the work:
  *   1. Nothing is spoken twice inside its cooldown, and a more urgent cue can
  *      pre-empt a less urgent one but not the reverse.
- *   2. A cue whose evidence is weak says so out loud ("possible opening"),
- *      because the classifier's OPENING recall is 43 % and speech that sounds
- *      certain would be the single most misleading thing in the demo.
+ *   2. A cue whose evidence is weak says so out loud, because speech that
+ *      sounds certain would be the single most misleading thing in the demo.
+ *      The classifier is weak (39 % on session-held-out real echoes against a
+ *      33 % chance floor), so it may only soften a cue it cannot cause: every
+ *      cue below is triggered by range, velocity or TTC — all measured — and
+ *      the class at most changes the noun.
  */
 
 const PRIORITY = { critical: 3, warning: 2, info: 1, ambient: 0 };
@@ -94,18 +97,17 @@ class GuidancePolicy {
       return { text: 'Closing fast, obstacle ' + dir.word + '.', level: 'critical', key: 'closing', reason: 'ttc ' + det.ttc_s.toFixed(1) + ' s' };
     }
 
-    // An opening is the one cue worth reporting even when weak — but it is
-    // always hedged, and a low-confidence call says "possible".
-    if (cls === 'OPENING' && det.confidence > 0.2) {
-      const hedge = conf >= 0.55 && stable ? 'Opening detected ' : 'Possible opening ';
-      return {
-        text: hedge + dir.word + ', ' + r.toFixed(1) + ' metres.',
-        level: 'info', key: 'opening-' + dir.word, reason: 'class OPENING at ' + (conf * 100).toFixed(0) + '%',
-      };
-    }
+    // There is deliberately no spoken "opening" cue from the classifier.
+    // An opening is the absence of a return, and the peak CFAR locks onto
+    // through a doorway belongs to the far wall behind it — so an acoustic
+    // OPENING call was really a distant wall being announced as a way through.
+    // Openings now come from findGapOpenings() in reconstruct.mjs and are
+    // drawn on the map as candidates; nothing tells the operator to walk into
+    // one. Legacy replays may still carry cls === 'OPENING'; it is ignored
+    // here rather than spoken.
 
     if (r < 1.3 && det.confidence > 0.3) {
-      const what = cls === 'SOFT' && conf > 0.5 ? 'Soft obstacle ' : 'Obstacle ';
+      const what = cls === 'SOFT' && conf > 0.5 && stable ? 'Soft obstacle ' : 'Obstacle ';
       return { text: what + dir.word + ', ' + r.toFixed(1) + ' metres.', level: 'warning', key: 'near-' + dir.word, reason: 'range ' + r.toFixed(2) + ' m' };
     }
     if (r < 2.6 && det.confidence > 0.35) {

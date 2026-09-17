@@ -448,9 +448,17 @@ export function findGapsBetweenSegments(segments, cfg = DEF) {
 }
 
 /**
- * Openings the classifier itself proposed.  Confidence is deliberately damped:
- * EchoNet's OPENING recall is 43 % on synthetic validation, so a lone OPENING
- * echo is weak evidence and must never render like a confirmed doorway.
+ * Openings the classifier itself proposed.
+ *
+ * Nothing in the live path produces these any more — the pipeline no longer
+ * emits an acoustic OPENING class at all, because an opening is the absence of
+ * a return rather than a texture, and the peak CFAR locks onto through a
+ * doorway belongs to the far wall behind it.  See shared/surfaceclass.mjs.
+ * Openings now come from findGapOpenings() instead.
+ *
+ * This is kept so recordings captured before that change still replay, and the
+ * confidence cap stays: a lone acoustic OPENING echo was always weak evidence
+ * and must never render like a confirmed doorway.
  */
 export function openingCandidatesFromPoints(openingPts, segments) {
   const clusters = clusterPoints(openingPts, 0.5, 2);

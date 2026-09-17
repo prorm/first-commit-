@@ -23,6 +23,7 @@
  * what turns a smooth demo into a stuttering one.
  */
 import { FFT } from './fft.mjs';
+import { surfaceFromProbs } from '../../shared/surfaceclass.mjs';
 
 export const SPEED_OF_SOUND = 343.2;
 export const CHIRP_F0 = 17500;
@@ -238,16 +239,24 @@ export class DetectionPipeline {
     }
 
     // --- 7. classifier ---------------------------------------------------
+    // EchoNet decides WALL vs SOFT and nothing else.  Its third head is not
+    // used: an opening is the absence of a return, not a texture, so it is
+    // recovered geometrically by reconstruct.mjs instead.  See
+    // shared/surfaceclass.mjs for why.  The full three-way distribution still
+    // rides along in classProbs so the diagnostics page can show the raw model.
     let classProbs = [0, 0, 0];
     let obstacleClass = null;
     let classConfidence = 0;
+    let classMargin = 0;
     const win = this.extractWindow(det.idx);
     if (opts.classifier && win) {
       try {
         const out = opts.classifier.forward(win);
         classProbs = Array.from(out.probs);
-        obstacleClass = out.className;
-        classConfidence = out.confidence;
+        const surface = surfaceFromProbs(classProbs);
+        obstacleClass = surface.className;
+        classConfidence = surface.confidence;
+        classMargin = surface.margin;
       } catch (e) {
         // A classifier failure must not cost us the range measurement.
         classProbs = [0, 0, 0];
@@ -275,6 +284,7 @@ export class DetectionPipeline {
         obstacleClass,
         classConfidence,
         classProbs,
+        classMargin,
       },
       diagnostics: {
         directIdx,

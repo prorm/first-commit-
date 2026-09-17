@@ -70,6 +70,24 @@ body {
   color: var(--text-3);
   text-transform: uppercase;
 }
+/* The surface class is the one readout on this screen that is not a
+   measurement. It is marked so nobody reads it as one. */
+.exp-tag {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  padding: 1px 4px;
+  margin-left: 4px;
+  border: 1px solid var(--warn);
+  border-radius: 3px;
+  color: var(--warn);
+  vertical-align: 1px;
+}
+.ds-warn {
+  border-left: 2px solid var(--warn);
+  padding-left: 8px;
+  color: var(--warn);
+  line-height: 1.5;
+}
 .ro-value {
   font-family: var(--mono);
   font-size: 46px;

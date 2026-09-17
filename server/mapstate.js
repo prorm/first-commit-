@@ -177,7 +177,8 @@ class MapState {
       // Spelled out so the summary screen never has to invent a caveat.
       caveats: [
         'Ranges are estimated from a single-element near-ultrasonic sensor; bearing is the phone boresight, not a resolved angle.',
-        'Class labels come from EchoNet (synthetic-validation recall: WALL 91 %, SOFT 74 %, OPENING 43 %).',
+        'Surface labels (WALL / SOFT) come from EchoNet and are EXPERIMENTAL: 39 % accuracy on real recordings held out by session, against a 33 % chance floor. Range, velocity and time-to-contact do not depend on them.',
+        'Openings are geometric candidates - a door-width gap in an otherwise continuous run of reconstructed wall - not classifier output, and not confirmed doorways.',
         'Phone position is dead-reckoned or simulated, not surveyed.',
       ],
     };

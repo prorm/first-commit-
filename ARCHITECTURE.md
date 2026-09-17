@@ -209,11 +209,30 @@ multipath, Doppler, 16-bit quantisation, and class-specific scattering physics.
 | SOFT | **74.3%** | 62 / 743 / 195 |
 | OPENING | **42.7%** | 165 / 408 / 427 |
 
-Overall accuracy **69.5%**. OPENING is the weak class and it is weak for a
-physical reason: a doorway returns no specular echo, only faint knife-edge
-diffraction from the jambs, which looks a lot like a soft absorber.
+Overall accuracy **69.5%** — on synthetic data, which is the whole problem.
+None of it survives real echoes. Measured against the recordings in
+`recordings/`, held out by whole session, the three-class model scores **39%
+against a 33% chance floor**, and a purely synthetic-trained model scores
+**48.2% on a two-class WALL/SOFT split, below its 50% chance floor.**
+
+OPENING is the weak class, and the synthetic numbers mislabel *why*. It is not
+that diffraction is subtle. It is that **an opening produces no echo to
+classify at all.** CFAR takes the strongest peak past the direct-path gate, so
+aimed through a doorway the detector locks onto the far wall of the next room,
+and the window handed to the network is a wall echo. The real recordings say
+this outright: pulses labelled OPENING carry the *highest*
+spreading-compensated target strength of any class (23.7 dB against WALL's
+18.2 dB), which is physically backwards for a hole in a wall.
 
 **How the architecture handles that**, rather than hiding it:
+
+0. **The OPENING head is not used.** EchoNet decides WALL vs SOFT only
+   (`shared/surfaceclass.mjs`), and returns no call when the two cannot be
+   separated. Openings are recovered geometrically by `findGapOpenings()` — a
+   door-width gap in an otherwise continuous run of reconstructed wall — which
+   is evidence this sensor can actually produce. The rule is enforced at all
+   three re-entry points: the pipeline, `normalizeDetection()`'s fallback
+   derivation, and `ClassFuser`.
 
 1. **Temporal fusion** (`spatial.mjs → ClassFuser`). Confidence-weighted,
    recency-weighted aggregation over a 2.2 s window for detections within 0.45 m
@@ -367,6 +386,10 @@ And the classifier's behaviour on them (`node scripts/verify-classifier.mjs`):
 
 An independent reimplementation landing within a few points, and reproducing the
 class-difficulty ordering, is the claim being made — not that they are identical.
+Both columns are synthetic-on-synthetic, and neither transfers: see the real-echo
+figures above. The twin now routes its classifier output through the same
+WALL/SOFT rule the phone uses, so it cannot report a class the live sensor would
+never emit.
 
 Simulation is **deterministic**: same seed, same scan, bit for bit (tested).
 
@@ -504,8 +527,12 @@ Stated plainly, because they are the difference between a prototype and a claim.
 - **No resolved bearing.** Bearing is the phone's boresight. TDOA is not
   implemented.
 - **Pose is dead-reckoned or simulated**, never surveyed. Error accumulates.
-- **Classifier is 69.5% accurate** on synthetic validation, and its training set
-  is synthetic — it has never been validated against recorded real echoes.
+- **Classifier is experimental and weak.** 69.5% on synthetic validation, but
+  **39% on real echoes held out by session, against a 33% chance floor**; a
+  synthetic-only model scores *below* chance on a two-class split. It is scoped
+  to WALL vs SOFT, may return no call, and cannot cause a spoken cue. Openings
+  are geometric, not classified. Nothing in the range/velocity/TTC path or the
+  reconstruction depends on it.
 - **Reconstruction is inference**, fitted to a noisy cloud. The 3.0 cm figure is
   fit-to-truth error *in simulation*, over boundary the beam actually swept.
 - **Band-limited by the hardware.** Phone speakers roll off above ~15 kHz, so

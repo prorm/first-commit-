@@ -208,7 +208,11 @@ async function printBanner(httpsUp) {
   console.log('');
   console.log('  MODE             ' + hub.mode.toUpperCase() + '   (no phone needed for simulation)');
   console.log('  CLASSIFIER       EchoNet ' + caps.classifier +
-    (caps.classifierMeta ? '  (' + caps.classifierMeta.n_params + ' params, val ' + (caps.classifierMeta.val_accuracy * 100).toFixed(1) + '%)' : ''));
+    (caps.classifierMeta
+      ? '  (' + caps.classifierMeta.n_params + ' params, '
+        + (caps.classifierMeta.classes_in_use || ['WALL', 'SOFT']).join('/') + ' only, '
+        + (caps.classifierMeta.val_accuracy * 100).toFixed(0) + '% on real echoes vs 50% chance - experimental)'
+      : ''));
   console.log('  VOICE            ' + aws.voice.label + '   (' + aws.voice.reason + ')');
   console.log('  BEDROCK          ' + (aws.bedrock.enabled ? 'ENABLED  ' + aws.bedrock.modelId : 'disabled  (' + aws.bedrock.reason + ')'));
   console.log('  SCENARIOS        ' + SCENARIO_LIST.map((s) => s.id).join(', '));

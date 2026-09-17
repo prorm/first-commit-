@@ -31,7 +31,7 @@ prints everything you need:
   DIAGNOSTICS      https://192.168.29.17:8443/diagnostics
 
   MODE             SIMULATION   (no phone needed for simulation)
-  CLASSIFIER       EchoNet loaded  (2339 params, val 69.5%)
+  CLASSIFIER       EchoNet loaded  (2339 params, WALL/SOFT only, 59% on real echoes vs 50% chance - experimental)
   VOICE            LOCAL FALLBACK   (AWS_REGION not set)
   BEDROCK          disabled  (no AWS credentials in environment)
   SCENARIOS        room, corridor, corner, apartment, openfield
@@ -238,14 +238,35 @@ Setup before you start: server running, `/map` fullscreen on the laptop,
 > **[1:00] Point at the AI panel.** *(bottom left)*
 >
 > "That's the real classifier — 2,339 parameters, running on the phone for every
-> single echo. Wall 0.92, soft 0.03, opening 0.06. The bars below are the
+> single echo. Wall 0.93, soft 0.02. The third bar is greyed out and marked
+> unused, and that's deliberate — I'll come back to it. The bars below are the
 > temporal history: it fuses consecutive looks at the same spot, and when they
 > disagree it says so instead of averaging the doubt away."
 >
 > **Be ready to say this, because it is the most credible thing you can say:**
-> "It's 69.5% accurate on synthetic validation. Wall recall is 91%, soft is 74%,
-> openings are 43%. So openings are always shown as candidates with a question
-> mark, never as confirmed doorways."
+> "We collected 5,000 real echo pulses across four phones and the classifier
+> came out at 39% — chance is 33%. So we went and found out why instead of
+> tuning it. Three things. The 5,000 pulses were really 30 bursts of 175
+> near-identical pulses, so our sample size was 30, not 5,000; our evaluation
+> had been scoring the model on its own training pulses. Each class got
+> collected at its own standoff, so range alone predicted the label at 38% —
+> the network was learning where the operator stood. And the OPENING class was
+> physically impossible: those pulses had the *highest* target strength of any
+> class, when a hole in a wall should return the least."
+>
+> **Then the insight, which is the part worth remembering:**
+> "An opening is not a sound texture. It's the absence of a return. CFAR takes
+> the strongest peak past the gate, so pointed through a doorway the sensor
+> locks onto the far wall of the next room — we were training the network to
+> call a distant wall a hole. So we cut the head. EchoNet now does hard versus
+> soft, and openings come from geometry: a door-width gap in a continuous run
+> of reconstructed wall. That's evidence this sensor can actually produce."
+>
+> **If asked what it cost:** "Nothing we were relying on. Range, closing
+> velocity and time-to-contact are measured, not classified, and the
+> reconstruction got *better* — the apartment scan went from 3 surfaces and
+> 7.5 m of wall to 6 surfaces, 11.2 m and 2 corners, because points we'd been
+> throwing away as acoustic openings are real boundary evidence."
 
 > **[1:30] The walls form.** *(the walker has covered ground by now)*
 >

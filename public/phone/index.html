@@ -44,7 +44,7 @@
       <div class="ro-sub" id="headingSub">no sensor</div>
     </div>
     <div class="ro">
-      <div class="ro-label">CLASSIFICATION</div>
+      <div class="ro-label">SURFACE <span class="exp-tag">EXPERIMENTAL</span></div>
       <div class="ro-value small" id="classValue">--</div>
       <div class="ro-sub" id="classSub">EchoNet idle</div>
     </div>
@@ -246,6 +246,14 @@
     <div class="ds-panel" id="dsPanel3" hidden>
       <div class="ds-badge" style="background: rgba(155, 140, 255, 0.2); color: #9b8cff; border: 1px solid #9b8cff;">STEP 3: OPENING / VOID (CLASS 2)</div>
       <div class="ds-instructions">
+        <p class="ds-warn"><b>This step no longer trains the shipped classifier.</b>
+          EchoNet decides WALL vs SOFT only. An opening is the absence of a
+          return, not a sound texture &mdash; aimed through a doorway the
+          detector locks onto the far wall of the next room, so these pulses
+          are far-wall echoes wearing the wrong label. Openings are found
+          geometrically instead, as door-width gaps in reconstructed wall.
+          The step is kept only for capturing long-range returns; skip it
+          unless you were asked for them.</p>
         <p><b>Target:</b> Open doorway, long hallway, or large room (>3 m to nearest obstacle).</p>
         <ol class="steps">
           <li>Aim the phone down the center of an open corridor or doorway.</li>

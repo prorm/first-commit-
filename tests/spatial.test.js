@@ -13,6 +13,7 @@ const {
   angleDelta, wrapDeg, timeToContact, PROTOCOL_VERSION, MESSAGE_TYPES,
 } = require('../public/shared/protocol.mjs');
 const { OccupancyGrid, PointCloud, Trajectory, ClassFuser } = require('../public/shared/spatial.mjs');
+const { surfaceFromProbs, SURFACE_CLASSES } = require('../public/shared/surfaceclass.mjs');
 const { reconstruct, fitLine, clusterPoints, findCorners } = require('../public/shared/reconstruct.mjs');
 const { SimulationEngine, SCENARIOS, raycast } = require('../server/simulation');
 const { MapState } = require('../server/mapstate');
@@ -557,7 +558,14 @@ test('map state accumulates a mission and reports honest statistics', () => {
   assert.ok(s.avgClassConfidence > 0 && s.avgClassConfidence <= 1);
   assert.ok(summary.reconstruction.segments >= 2, 'segments ' + summary.reconstruction.segments);
   assert.ok(summary.reconstruction.totalWallLength > 3);
-  assert.equal(summary.caveats.length, 3, 'the summary must always carry its limits');
+  assert.ok(summary.caveats.length >= 3, 'the summary must always carry its limits');
+  const caveatText = summary.caveats.join(' ');
+  assert.ok(/dead-reckoned|not surveyed/i.test(caveatText), 'position limit must be stated');
+  assert.ok(/EXPERIMENTAL/.test(caveatText), 'the class label must be marked experimental');
+  assert.ok(/openings are geometric/i.test(caveatText),
+    'the summary must say openings are geometry, not classifier output');
+  assert.equal(summary.stats.classCounts.OPENING, 0,
+    'no live detection may carry the OPENING class');
 
   const snap = map.snapshot({ reconstruct: true });
   assert.ok(snap.grid.idx.length > 50);
@@ -634,30 +642,81 @@ test('a critical cue pre-empts a lower-priority one', () => {
   assert.ok(/stop/i.test(critical.text));
 });
 
-test('an uncertain opening is spoken as a possibility', () => {
-  const g = new GuidancePolicy();
-  const cue = g.evaluate(normalizeDetection({
-    t: 3000000, range_m: 2.7, confidence: 0.5, bearing_deg: 300,
-    obstacleClass: 'OPENING', classConfidence: 0.35, classProbs: [0.3, 0.35, 0.35],
-    fusedClass: 'OPENING', fusedConfidence: 0.35,
-    phone: { x: 0, y: 0, heading: 0 },
-  }));
-  assert.ok(cue);
-  assert.ok(/possible/i.test(cue.text), 'low confidence must be hedged: ' + cue.text);
-  assert.ok(/left/i.test(cue.text), 'direction should be spoken: ' + cue.text);
-});
-
-test('a confident stable opening drops the hedge', () => {
+test('an acoustic OPENING call is never spoken as a way through', () => {
+  // Through a doorway, CFAR locks onto the far wall of the next room, so an
+  // acoustic OPENING is a distant wall wearing the wrong label. Even a
+  // confident, stable one must not produce speech that invites the operator
+  // to walk forward.
   const g = new GuidancePolicy();
   const d = normalizeDetection({
     t: 4000000, range_m: 2.7, confidence: 0.7, bearing_deg: 0,
-    obstacleClass: 'OPENING', classConfidence: 0.7, classProbs: [0.15, 0.15, 0.7],
-    fusedClass: 'OPENING', fusedConfidence: 0.7, phone: { x: 0, y: 0, heading: 0 },
+    obstacleClass: 'OPENING', classConfidence: 0.95, classProbs: [0.02, 0.03, 0.95],
+    fusedClass: 'OPENING', fusedConfidence: 0.95, phone: { x: 0, y: 0, heading: 0 },
   });
   d.fusedStable = true;
   const cue = g.evaluate(d);
-  assert.ok(cue);
-  assert.ok(/opening detected/i.test(cue.text), cue.text);
+  if (cue) {
+    assert.ok(!/opening/i.test(cue.text), 'no opening cue may be spoken: ' + cue.text);
+    assert.ok(!/clear|through|doorway/i.test(cue.text), 'must not invite forward motion: ' + cue.text);
+  }
+});
+
+test('the classifier can soften a cue but never cause one', () => {
+  // Every cue is triggered by range, velocity or TTC — all measured. The
+  // class only changes the noun, so a weak classifier cannot invent speech.
+  const g = new GuidancePolicy();
+  const far = g.evaluate(normalizeDetection({
+    t: 3000000, range_m: 3.4, confidence: 0.9, bearing_deg: 300,
+    obstacleClass: 'SOFT', classConfidence: 0.99, classProbs: [0.005, 0.99, 0.005],
+    fusedClass: 'SOFT', fusedConfidence: 0.99, phone: { x: 0, y: 0, heading: 0 },
+  }));
+  assert.equal(far, null, 'a confident class at 3.4 m must not create a cue on its own');
+
+  const g2 = new GuidancePolicy();
+  const near = g2.evaluate(Object.assign(normalizeDetection({
+    t: 3000000, range_m: 1.1, confidence: 0.9, bearing_deg: 300,
+    obstacleClass: 'SOFT', classConfidence: 0.9, classProbs: [0.05, 0.9, 0.05],
+    fusedClass: 'SOFT', fusedConfidence: 0.9, phone: { x: 0, y: 0, heading: 0 },
+  }), { fusedStable: true }));
+  assert.ok(near, 'range alone must still produce the cue');
+  assert.ok(/soft obstacle/i.test(near.text), 'the class names the obstacle: ' + near.text);
+  assert.ok(/left/i.test(near.text), 'direction should be spoken: ' + near.text);
+});
+
+test('no live path can emit obstacleClass OPENING', () => {
+  // The two-class rule has to hold at every re-entry point: the pipeline,
+  // normalizeDetection's fallback derivation, and the temporal fuser.
+  const openingHeavy = [0.02, 0.03, 0.95];
+  assert.equal(surfaceFromProbs(openingHeavy).className, 'SOFT',
+    'the discarded head must not win');
+
+  const derived = normalizeDetection({
+    range_m: 2, confidence: 0.6, classProbs: openingHeavy,
+    phone: { x: 0, y: 0, heading: 0 },
+  });
+  assert.notEqual(derived.obstacleClass, 'OPENING',
+    'normalizeDetection must not derive OPENING from probabilities');
+
+  const fuser = new ClassFuser();
+  let fused = null;
+  for (let i = 0; i < 6; i++) {
+    fused = fuser.fuse(normalizeDetection({
+      t: 5000000 + i * 50, range_m: 2, confidence: 0.9, bearing_deg: 0,
+      classProbs: openingHeavy, phone: { x: 0, y: 0, heading: 0 },
+    }));
+  }
+  assert.notEqual(fused.className, 'OPENING',
+    'the fuser must not conjure a class the pipeline refused to emit');
+});
+
+test('a coin-flip between WALL and SOFT is reported as no call', () => {
+  const tied = surfaceFromProbs([0.45, 0.45, 0.10]);
+  assert.equal(tied.className, null, 'an unseparated pair is not a decision');
+  assert.equal(tied.confidence, 0);
+  const clear = surfaceFromProbs([0.7, 0.2, 0.1]);
+  assert.equal(clear.className, 'WALL');
+  assert.ok(clear.confidence > 0.7,
+    'confidence renormalises over the retained heads, not the discarded one');
 });
 
 test('sustained silence is reported as a clear path', () => {
@@ -779,7 +838,12 @@ test('Bedrock prompt carries the measured numbers and the model limits', () => {
   });
   assert.ok(prompt.includes('6.2 m'), 'measured distance must be in the prompt');
   assert.ok(prompt.includes('180'), 'detection count must be in the prompt');
-  assert.ok(/OPENING 43/.test(prompt), 'the model must be told its own weakness');
+  assert.ok(/EXPERIMENTAL/.test(prompt) && /39%/.test(prompt) && /33% chance/.test(prompt),
+    'the model must be told the classifier is weak, and by how much');
+  assert.ok(/does not detect openings/i.test(prompt),
+    'the model must be told openings are geometric, not classified');
+  assert.ok(/absence of a return/i.test(prompt),
+    'the model must be told why an acoustic opening call is meaningless');
   assert.ok(/not navigation-certified|no safety guarantees|Do not make safety guarantees/i.test(prompt));
   assert.ok(/hedged language/i.test(prompt), 'the prompt must require hedging');
 });

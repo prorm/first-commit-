@@ -172,6 +172,26 @@ body::before { content: none; }
   letter-spacing: 0.1em;
   font-weight: 600;
 }
+/* Range, velocity and TTC are measured. The class is not — it is a weak
+   model's opinion, and the panel says so rather than letting the reader
+   assume the whole panel carries the same weight. */
+.exp-tag {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  padding: 1px 4px;
+  margin-left: 4px;
+  border: 1px solid var(--warn);
+  border-radius: 3px;
+  color: var(--warn);
+  vertical-align: 1px;
+}
+.arow.unused { opacity: 0.4; }
+.arow.unused em {
+  font-style: normal;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+}
 .ai-note {
   font-size: 10px;
   line-height: 1.5;

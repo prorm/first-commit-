@@ -8,8 +8,9 @@
  * simply shown without that paragraph.
  *
  * The prompt is constrained to the measured numbers and instructed to preserve
- * uncertainty, because the underlying classifier is 69.5 % accurate and a
- * fluent sentence must not imply more confidence than the sensor earned.
+ * uncertainty, because the underlying classifier is weak — WALL vs SOFT only,
+ * and roughly 59 % on real echoes against a 50 % chance floor — and a fluent
+ * sentence must not imply more confidence than the sensor earned.
  */
 let BedrockRuntimeClient = null;
 let InvokeModelCommand = null;
@@ -51,7 +52,7 @@ class BedrockSummarizer {
       `- distance walked: ${(s.distanceScanned || 0).toFixed(1)} m`,
       `- detections: ${s.detections || 0} (${((s.cfarRate || 0) * 100).toFixed(0)}% cleared the CFAR threshold)`,
       `- range span: ${s.minRange ? s.minRange.toFixed(2) : 'n/a'} m to ${s.maxRange ? s.maxRange.toFixed(2) : 'n/a'} m`,
-      `- classified returns: ${(s.classCounts && s.classCounts.WALL) || 0} WALL, ${(s.classCounts && s.classCounts.SOFT) || 0} SOFT, ${(s.classCounts && s.classCounts.OPENING) || 0} OPENING`,
+      `- surface calls (EXPERIMENTAL, see limits): ${(s.classCounts && s.classCounts.WALL) || 0} WALL, ${(s.classCounts && s.classCounts.SOFT) || 0} SOFT`,
       `- mean class confidence: ${((s.avgClassConfidence || 0) * 100).toFixed(0)}%`,
       `- reconstructed boundary: ${r.segments || 0} surfaces totalling ${(r.totalWallLength || 0).toFixed(1)} m, ${r.corners || 0} corners, ${r.corridors || 0} corridor(s)`,
       `- reconstruction confidence: ${((r.confidence || 0) * 100).toFixed(0)}%`,
@@ -61,7 +62,9 @@ class BedrockSummarizer {
       'SENSOR LIMITS YOU MUST RESPECT',
       '- Bearing is the phone boresight with roughly 30 degrees of beamwidth; angles are approximate.',
       '- Phone position is dead-reckoned or simulated, not surveyed.',
-      '- The echo classifier scores 69.5% on synthetic validation: WALL recall 91%, SOFT 74%, OPENING 43%. OPENING calls are weak evidence.',
+      '- The echo classifier is EXPERIMENTAL and weak. On real recordings held out by session it scores 39% against a 33% chance floor, so WALL/SOFT calls are suggestive at best. Never state a surface material as fact, and never build the summary around it.',
+      '- The classifier does not detect openings and is not asked to. An opening is the absence of a return, not a sound texture: through a doorway the detector locks onto the far wall of the next room. Opening candidates listed above are GEOMETRIC - a door-width gap in an otherwise continuous run of reconstructed wall - and are candidates, not confirmed doorways.',
+      '- Range, closing velocity and time-to-contact are measured and are the trustworthy part of this scan. Lead with those.',
       '',
       'TASK',
       'Write 2-4 sentences an operator could read aloud, describing what the scan suggests about the space and where the uncertainty is. Use hedged language ("suggests", "approximately", "possible") for anything the sensor cannot establish firmly. Do not invent measurements that are not listed above. Do not make safety guarantees or claim this is navigation-certified. Plain prose, no headings, no bullet points.',
