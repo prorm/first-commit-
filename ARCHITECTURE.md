@@ -224,6 +224,31 @@ this outright: pulses labelled OPENING carry the *highest*
 spreading-compensated target strength of any class (23.7 dB against WALL's
 18.2 dB), which is physically backwards for a hole in a wall.
 
+### Live boundaries vs. fitted surfaces
+
+Two layers draw walls, from two different claims, and the distinction is the
+point rather than a redundancy.
+
+`shared/boundary.mjs` (**live boundaries**) works per echo. A single return does
+not locate a point, it locates a *wavefront tangent*: the reflector lies
+somewhere on an arc of radius `range` across the beam, and for a flat surface
+the chord of that arc is the surface. So one confident echo already draws a
+short bar, pinned in world coordinates — walk forward or turn around and it
+stays where the wall is. Successive chirps on the same wall merge (within 15 cm
+and 14 degrees) into one longer bar instead of stacking, and a bar a later pulse
+measures straight through loses strength and is withdrawn. In the apartment
+scenario 753 detections collapse to 43 bars spanning 9 x 7 m.
+
+`shared/reconstruct.mjs` (**fitted surfaces**) works on the accumulated cloud
+with a real line fit, residual and inlier test. It is a stronger claim and it
+needs history, which is why `SURFACES` sits at 0 while `BOUNDARIES` is already
+climbing.
+
+The renderer fades the live bars out as the RECONSTRUCT morph comes up, so the
+weaker claim yields to the stronger one instead of arguing with it on screen.
+Neither layer touches the wire protocol: boundaries are computed client-side
+from detections the map already receives.
+
 **How the architecture handles that**, rather than hiding it:
 
 0. **The OPENING head is not used.** EchoNet decides WALL vs SOFT only

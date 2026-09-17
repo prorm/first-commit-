@@ -29,6 +29,16 @@ const CLASS_RGB = {
 const LIVE_RGB = [44, 232, 245];
 const INFER_RGB = [179, 157, 255];
 
+/**
+ * Live boundary bars get their own palette, hotter than CLASS_RGB, because
+ * they are direct measurement rather than a fit. The layering rule still
+ * holds: what glows is what was measured.
+ */
+const BOUNDARY_RGB = {
+  WALL: [44, 232, 245],
+  SOFT: [255, 180, 84],
+};
+
 export class MapRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -182,6 +192,10 @@ export class MapRenderer {
     if (this.layers.truth && world.truth) this.drawTruth(c, world.truth);
     if (this.layers.surfaces && world.reconstruction) this.drawReconstruction(c, world.reconstruction, now);
     if (this.layers.cloud && world.cloud) this.drawCloud(c, world.cloud, world.reconstruction, now);
+    // Boundaries sit above the cloud and the occupancy grid on purpose: the
+    // occupied cells behind them are the same cyan, and a wall that reads as
+    // one crisp edge over the blocks is the whole blueprint effect.
+    if (this.layers.surfaces && world.boundaries) this.drawBoundaries(c, world.boundaries, now);
     if (world.trajectory) this.drawTrajectory(c, world.trajectory, now);
     this.drawPulses(c, now);
     if (world.pose) this.drawSensor(c, world.pose, world.lastDetection, now);
@@ -382,6 +396,92 @@ export class MapRenderer {
         plateText(c, 'CORRIDOR ' + cr.width.toFixed(1) + ' m', p.x + 8, p.y, INFER_RGB, 0.7);
       }
     }
+  }
+
+  /**
+   * Live wall boundaries: the tactical blueprint.
+   *
+   * These are per-echo wavefront tangents from shared/boundary.mjs, pinned in
+   * world coordinates, not fitted surfaces. They are drawn bright and sharp
+   * because that is what they are — a direct measurement of where a hard
+   * reflector is right now — and they carry their evidence in their weight:
+   * a bar confirmed by fifty chirps is thicker and brighter than one seen once.
+   *
+   * They fade out as the RECONSTRUCT morph comes up. The fitted surfaces are a
+   * stronger claim than raw tangents, so when the fit arrives it takes the
+   * stage instead of arguing with this layer on top of it.
+   */
+  drawBoundaries(c, bars, now) {
+    if (!bars || !bars.length) return;
+    const fade = 1 - this.reconAnim;
+    if (fade <= 0.02) return;
+    const wallMs = Date.now();
+
+    c.save();
+    c.lineCap = 'butt';
+    for (const s of bars) {
+      const a = this.toScreen(s.a.x, s.a.y);
+      const b = this.toScreen(s.b.x, s.b.y);
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 0.5) continue;
+      if (Math.max(a.x, b.x) < -40 || Math.min(a.x, b.x) > this.w + 40) continue;
+      if (Math.max(a.y, b.y) < -40 || Math.min(a.y, b.y) > this.h + 40) continue;
+
+      const rgb = BOUNDARY_RGB[s.className] || LIVE_RGB;
+      const str = Math.max(0, Math.min(1, s.strength));
+      // Repeated confirmation reads as solidity. Strength saturates quickly
+      // (it is only pulled down by contradiction), so the number of looks is
+      // what actually separates a surveyed wall from a single glance — and it
+      // drives width and opacity together, which is what makes one read as
+      // architecture and the other as a hint.
+      const solid = Math.min(1, 0.32 + s.hits / 11);
+      const alpha = 0.88 * fade * (0.26 + 0.74 * solid) * (0.45 + 0.55 * str);
+
+      // A freshly confirmed bar flares briefly. It marks where the beam just
+      // landed, so the eye follows the live edge of the scan.
+      const age = wallMs - (s.t || 0);
+      const fresh = age >= 0 && age < 420 ? 1 - age / 420 : 0;
+
+      // Two passes make the neon: a wide soft halo that lifts the line off the
+      // occupancy blocks behind it, then a narrow near-white core that stays
+      // crisp at any zoom. One pass at this width would just look like fog.
+      c.beginPath();
+      c.moveTo(a.x, a.y);
+      c.lineTo(b.x, b.y);
+
+      c.shadowBlur = 4 + 10 * solid + 9 * fresh;
+      c.shadowColor = 'rgba(' + rgb.join(',') + ',' + (0.75 * fade).toFixed(3) + ')';
+      c.strokeStyle = 'rgba(' + rgb.join(',') + ',' + (alpha * 0.55).toFixed(3) + ')';
+      c.lineWidth = 2.6 + 5.0 * solid + 1.6 * fresh;
+      c.stroke();
+
+      c.shadowBlur = 0;
+      const core = rgb.map((v) => Math.min(255, Math.round(v + (255 - v) * (0.3 + 0.45 * solid))));
+      c.strokeStyle = 'rgba(' + core.join(',') + ',' + Math.min(1, alpha + 0.15 * fresh).toFixed(3) + ')';
+      c.lineWidth = 0.9 + 1.7 * solid + 0.6 * fresh;
+      c.stroke();
+
+      // End brackets: a short tick square to the wall at each end. This is the
+      // blueprint cue — it makes a run of merged bars read as one architectural
+      // edge with a defined extent, rather than as a glowing smear.
+      if (len > 9) {
+        const ux = dx / len;
+        const uy = dy / len;
+        const tick = Math.min(5.5, 2.2 + 3.3 * solid);
+        c.shadowBlur = 0;
+        c.lineWidth = 1;
+        c.strokeStyle = 'rgba(' + rgb.join(',') + ',' + (alpha * 0.75).toFixed(3) + ')';
+        c.beginPath();
+        c.moveTo(a.x + uy * tick, a.y - ux * tick);
+        c.lineTo(a.x - uy * tick, a.y + ux * tick);
+        c.moveTo(b.x + uy * tick, b.y - ux * tick);
+        c.lineTo(b.x - uy * tick, b.y + ux * tick);
+        c.stroke();
+      }
+    }
+    c.restore();
   }
 
   /**

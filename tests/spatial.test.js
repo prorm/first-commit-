@@ -14,6 +14,7 @@ const {
 } = require('../public/shared/protocol.mjs');
 const { OccupancyGrid, PointCloud, Trajectory, ClassFuser } = require('../public/shared/spatial.mjs');
 const { surfaceFromProbs, SURFACE_CLASSES } = require('../public/shared/surfaceclass.mjs');
+const { BoundaryMap } = require('../public/shared/boundary.mjs');
 const { reconstruct, fitLine, clusterPoints, findCorners } = require('../public/shared/reconstruct.mjs');
 const { SimulationEngine, SCENARIOS, raycast } = require('../server/simulation');
 const { MapState } = require('../server/mapstate');
@@ -346,6 +347,104 @@ test('clustering separates surfaces that are far apart', () => {
   const pts = wallPoints(0, 0, 2, 0, 16).concat(wallPoints(0, 4, 2, 4, 16));
   const clusters = clusterPoints(pts, 0.38, 4);
   assert.equal(clusters.length, 2, 'two walls 4 m apart are two clusters');
+});
+
+// ---------------------------------------------------------------------------
+// Live boundaries
+// ---------------------------------------------------------------------------
+
+function echo(x, y, bearing, range, opts = {}) {
+  return normalizeDetection(Object.assign({
+    t: opts.t || 1000, range_m: range, bearing_deg: bearing, confidence: 0.9,
+    cfar_pass: true, obstacleClass: 'WALL', classConfidence: 0.9,
+    classProbs: [0.9, 0.05, 0.05], fusedClass: 'WALL',
+    phone: { x, y, heading: bearing, confidence: 1 },
+  }, opts));
+}
+
+test('a single confident echo draws a wall tangent, not a point', () => {
+  const bm = new BoundaryMap();
+  assert.ok(bm.add(echo(0, 0, 0, 2.5)), 'one confident echo is enough');
+  const [s] = bm.segments();
+  // Facing north at a wall 2.5 m out: the bar sits at y = 2.5 and runs east-west.
+  assert.ok(Math.abs(s.a.y - 2.5) < 1e-6 && Math.abs(s.b.y - 2.5) < 1e-6,
+    'the bar lies on the range arc at y = 2.5');
+  assert.ok(Math.abs(s.a.x + s.b.x) < 1e-6, 'centred on the boresight');
+  const len = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y);
+  assert.ok(len > 0.3, 'the bar spans the beam, it is not a dot: ' + len.toFixed(2));
+});
+
+test('boundaries are pinned in world space as the operator walks', () => {
+  const bm = new BoundaryMap();
+  // Walk 0 -> 1.95 m north at a wall at y = 2.5, 40 pulses.
+  for (let i = 0; i < 40; i++) {
+    const y = i * 0.05;
+    bm.add(echo(0, y, 0, 2.5 - y, { t: 1000 + i * 50 }));
+  }
+  assert.equal(bm.length, 1, 'forty looks at one wall stay one wall, not forty bars');
+  const [s] = bm.segments();
+  assert.ok(Math.abs(s.a.y - 2.5) < 0.02 && Math.abs(s.b.y - 2.5) < 0.02,
+    'the wall stays at y = 2.5 while the sensor moves: ' + s.a.y.toFixed(3));
+  assert.ok(s.hits === 40, 'every look counted: ' + s.hits);
+});
+
+test('turning 180 degrees leaves the wall behind you where it was', () => {
+  const bm = new BoundaryMap();
+  for (let i = 0; i < 6; i++) bm.add(echo(0, 0, 0, 2.0, { t: 1000 + i * 50 }));
+  const before = bm.segments()[0];
+  // Now face south at the opposite wall.
+  for (let i = 0; i < 6; i++) bm.add(echo(0, 0, 180, 2.0, { t: 2000 + i * 50 }));
+  const segs = bm.segments();
+  assert.equal(segs.length, 2, 'two walls, one each side');
+  const kept = segs.find((s) => s.id === before.id);
+  assert.ok(kept, 'the wall behind the operator survives the turn');
+  assert.ok(Math.abs(kept.a.y - 2.0) < 1e-6, 'and has not moved');
+  assert.ok(segs.some((s) => Math.abs(s.a.y + 2.0) < 1e-6), 'the new wall is at y = -2');
+});
+
+test('a bar a later pulse measures straight through is withdrawn', () => {
+  const bm = new BoundaryMap();
+  for (let i = 0; i < 4; i++) bm.add(echo(0, 0, 0, 1.0, { t: 1000 + i * 50 }));
+  assert.equal(bm.length, 1, 'a wall at 1 m');
+  // Same bearing, but the echo now comes from 3 m: the 1 m bar cannot be there.
+  for (let i = 0; i < 8; i++) bm.add(echo(0, 0, 0, 3.0, { t: 2000 + i * 50 }));
+  const ys = bm.segments().map((s) => s.a.y);
+  assert.ok(!ys.some((y) => Math.abs(y - 1.0) < 0.2),
+    'free space withdrew the contradicted bar: ' + JSON.stringify(ys));
+  assert.ok(ys.some((y) => Math.abs(y - 3.0) < 0.2), 'and the real wall is drawn');
+});
+
+test('weak, non-CFAR and unclassified echoes never draw a boundary', () => {
+  const bm = new BoundaryMap();
+  assert.equal(bm.add(echo(0, 0, 0, 2, { confidence: 0.4 })), null, 'low confidence');
+  assert.equal(bm.add(echo(0, 0, 0, 2, { cfar_pass: false })), null, 'below CFAR');
+  assert.equal(bm.length, 0, 'nothing drawn from weak evidence');
+});
+
+test('OPENING can never become a live boundary', () => {
+  // An opening is the absence of a return; it cannot produce a tangent. Even a
+  // legacy replay frame carrying the class must not draw a wall.
+  const bm = new BoundaryMap();
+  const legacy = normalizeDetection({
+    t: 1000, range_m: 2, bearing_deg: 0, confidence: 0.95, cfar_pass: true,
+    obstacleClass: 'OPENING', fusedClass: 'OPENING', classConfidence: 0.95,
+    classProbs: [0.02, 0.03, 0.95], phone: { x: 0, y: 0, heading: 0, confidence: 1 },
+  });
+  assert.equal(bm.add(legacy), null, 'OPENING draws nothing');
+  assert.equal(bm.length, 0);
+});
+
+test('the boundary layer stays bounded under a long scan', () => {
+  const bm = new BoundaryMap();
+  let t = 1000;
+  for (let lap = 0; lap < 40; lap++) {
+    for (let d = 0; d < 360; d += 5) {
+      bm.add(echo(0, 0, d, 2 + (lap % 3) * 0.5, { t: (t += 50) }));
+    }
+  }
+  assert.ok(bm.length <= bm.cfg.maxBars, 'hard cap holds: ' + bm.length);
+  assert.ok(bm.segments().every((s) => Number.isFinite(s.a.x) && Number.isFinite(s.b.y)),
+    'no NaN geometry survives merging');
 });
 
 test('reconstruction fits a straight wall and reports low residual', () => {

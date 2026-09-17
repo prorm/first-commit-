@@ -12,6 +12,7 @@
 import { WsClient } from '../shared/wsclient.mjs';
 import { OccupancyGrid, PointCloud, Trajectory } from '../shared/spatial.mjs';
 import { reconstruct } from '../shared/reconstruct.mjs';
+import { BoundaryMap } from '../shared/boundary.mjs';
 import { CLASSES, makePose } from '../shared/protocol.mjs';
 import { SURFACE_CLASSES } from '../shared/surfaceclass.mjs';
 import { MapRenderer, worldBounds, CLASS_RGB } from './renderer.mjs';
@@ -43,6 +44,10 @@ const world = {
   grid: new OccupancyGrid(),
   cloud: new PointCloud(),
   trajectory: new Trajectory(),
+  // Live per-echo wall tangents, pinned in world space. Kept separate from the
+  // fitted reconstruction: this is measurement, that is inference.
+  boundaryMap: new BoundaryMap(),
+  boundaries: [],          // cached segments() for the renderer, rebuilt on ingest
   pose: makePose({ confidence: 0.6 }),
   reconstruction: null,
   serverGrid: null,        // sparse grid straight from the snapshot
@@ -203,6 +208,10 @@ function ingest(det) {
   world.detections++;
   world.cloud.add(det);
   world.trajectory.push(det.phone, det.t);
+  // Every pulse folds in: a confident one may draw or extend a wall, and any
+  // pulse may contradict a bar it measured straight through.
+  world.boundaryMap.add(det);
+  world.boundaries = world.boundaryMap.segments();
   world.grid.integrate(det.phone, det.bearing_deg, det.range_m, {
     weight: det.confidence * (0.35 + 0.65 * det.phone.confidence),
     className: det.fusedClass || det.obstacleClass,
@@ -267,6 +276,8 @@ function resetWorld() {
   world.grid = new OccupancyGrid();
   world.cloud = new PointCloud();
   world.trajectory = new Trajectory();
+  world.boundaryMap.reset();
+  world.boundaries = [];
   world.reconstruction = null;
   world.serverGrid = null;
   world.lastDetection = null;
@@ -338,6 +349,10 @@ function renderStats() {
     ['DETECTIONS', String(st.detections != null ? st.detections : world.detections), true],
     ['SCANNED', (st.distanceScanned || world.trajectory.distance || 0).toFixed(1), false, 'm'],
     ['ECHO POINTS', String(world.cloud.points.length), false],
+    // Live boundaries are what the operator is actually looking at while
+    // walking; SURFACES below is the fitted result and stays 0 until there is
+    // enough cloud to fit. Showing both is the point: measurement, then fit.
+    ['BOUNDARIES', String(world.boundaries.length), true],
     // Area observed, not "coverage": a percentage of the fixed 24 x 24 m grid
     // says nothing useful about a 6 x 4 m room.
     ['AREA OBSERVED', ((st.freeArea || 0) + (st.occupiedArea || 0)).toFixed(1), false, 'm²'],
