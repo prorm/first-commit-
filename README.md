@@ -15,6 +15,7 @@
 - [Overview](#-overview)
 - [System Architecture](#-system-architecture)
 - [Quick Start](#-quick-start)
+- [👥 Team Field-Guide: Multi-Phone Real Data Collection & Retraining](#-team-field-guide-multi-phone-real-data-collection--retraining)
 - [Team Guide: Calibration & Tuning Accuracy](#-team-guide-calibration--tuning-accuracy)
   - [1. Mobile Calibration Workflow](#1-mobile-calibration-workflow)
   - [2. Tuning DSP & Range Detection](#2-tuning-dsp--range-detection)
@@ -110,6 +111,92 @@ Open **`http://localhost:8000/map`** on your laptop.
 - **`P`** — Replay last recorded mission.
 - **`F`** — Fit view to room bounds.
 - **`C`** — Re-center on sensor.
+
+---
+
+## 👥 Team Field-Guide: Multi-Phone Real Data Collection & Retraining
+
+> **Tonight's Mission for the Team of 4:** Collect as many physical acoustic pulse signatures as possible across all your devices (**OnePlus Nord / series, Redmi Note 13, Motorola**), pool them into the central repository, and train EchoNet on physical acoustics.
+
+### 📱 1. Phone Hardware Orientation & Positioning
+
+Different phones have different microphone and speaker placements. For acoustic radar, the speaker transmits near-ultrasonic chirps (17.5–22 kHz) and the microphone captures the physical reflection:
+
+| Phone Model | Speaker Location | Microphone Location | Correct Orientation |
+|:---|:---|:---|:---|
+| **OnePlus (Nord / 5 / CE / etc)** | Bottom edge | Bottom edge (pinhole next to USB-C) | **Point the bottom edge directly at the obstacle / target.** |
+| **Redmi Note 13** | Bottom + top earpiece | Bottom edge primary mic (+ top noise mic) | **Point bottom edge forward.** Hold by sides. |
+| **Motorola (Moto G / Edge)** | Bottom edge | Bottom edge primary mic | **Point bottom edge directly at target.** |
+
+#### ⚠️ Critical Rules for Clean Acoustics:
+1. **DO NOT BLOCK THE MIC PINHOLE**: Hold the phone by its long side edges or top edge. If your palm or finger covers the bottom microphone hole, the echo SNR drops to zero.
+2. **MEDIA VOLUME**: Set media volume to **70% – 80%**. Do *not* max out to 100% (phone amplifiers distort at maximum gain, producing harmonic distortion).
+3. **AUDIO / VOICE GUIDANCE**: Kept **OFF by default** in the phone app so speech synthesis does not leak into the microphone while listening for echo chirps.
+
+---
+
+### 📋 2. Step-by-Step Data Collection Protocol
+
+1. **Connect Phone to Laptop:**
+   - Connect phone to the same Wi-Fi as your laptop.
+   - Start server on laptop: `npm start`
+   - On phone browser (Chrome/Brave), open: `http://<laptop-ip>:3000/phone` (or scan the QR code on the laptop screen).
+2. **Open the Collector:**
+   - Tap **🎯 RECORD TRAINING DATASET** at the bottom of the screen.
+3. **Select Your Device & Target Count:**
+   - Choose your phone model from the **Device** dropdown (*OnePlus Nord*, *Redmi Note 13*, *Motorola*, etc.).
+   - Choose **Pulses per class**: select **100** or **200** pulses. (At 20 chirps/sec, 200 pulses takes only **~10–15 seconds**!).
+4. **Step 1: WALL (Class 0)**
+   - Aim the phone bottom edge at a solid wall (plaster, drywall, wooden door, brick, or glass).
+   - **Pro-Tip for Diversity:** Tap **START RECORDING** and **slowly walk backward and forward between 0.5 m and 3.0 m** while the counter climbs! This trains the model to recognize walls at all distances.
+   - Chime sounds when complete. Tap **NEXT: SOFT / HUMAN →**.
+5. **Step 2: SOFT / HUMAN (Class 1)**
+   - Have a teammate stand in front of the phone, or aim at a couch, mattress, heavy curtains, or winter jacket.
+   - Tap **START RECORDING** and record at **1.0 m, 1.8 m, and 2.5 m**. Have your teammate face forward and sideways.
+   - Chime sounds when complete. Tap **NEXT: OPENING →**.
+6. **Step 3: OPENING / VOID (Class 2)**
+   - Aim down the center of an open hallway, down a stairwell, or through an open doorway into an empty room (>3.5 m to any object).
+   - Tap **START RECORDING** and hold steady for 10 seconds.
+   - Chime sounds when complete. Tap **NEXT: REVIEW & SAVE →**.
+7. **Step 4: SAVE TO LAPTOP SERVER**
+   - Verify the summary shows your counts (e.g., 200 Wall, 200 Soft, 200 Opening = 600 pulses).
+   - Tap **💾 SAVE TO LAPTOP SERVER**.
+   - The file is automatically saved into the `recordings/` folder as `real_echo_dataset_<timestamp>.json` with your phone's model name!
+
+---
+
+### 🚀 3. Multi-Phone Automatic Dataset Pooling & Training
+
+You do **not** need to manually merge JSON files! Every time any team member saves a dataset from their phone, `server/hub.js` saves a unique timestamped file in `recordings/`.
+
+The trainer script **automatically discovers and pools all files matching `recordings/real_*.json`**, deduplicating any repeated pulses:
+
+#### Run the Trainer:
+```bash
+# 1. Standard Calibrated Training (Pulls all real phone recordings):
+npm run train-real
+
+# 2. Pure Real Hardware Training (100% real phone acoustic signatures, zero synthetic data):
+node scripts/train-real.mjs --pure-real
+```
+
+The trainer will print:
+- List of all dataset files discovered and pulse count per device.
+- Class breakdown (e.g. 500 Wall, 500 Soft, 500 Opening).
+- Confusion matrix on your phones' actual hardware acoustics.
+- Automatically exports the calibrated weights to `src/classifier/echonet_weights.js` and `public/vendor/echonet_weights.js`.
+
+---
+
+### 🧪 4. Verifying Model Accuracy
+After running the trainer:
+```bash
+# Run unit & spatial pipeline tests:
+npm test
+
+# Benchmark classifier metrics:
+node scripts/verify-classifier.mjs 100
+```
 
 ---
 

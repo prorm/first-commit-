@@ -79,8 +79,8 @@
     <button class="btn" id="btnCalibrate">CALIBRATE</button>
   </div>
   <div class="btn-row">
-    <button class="btn btn-sm" id="btnAudio">AUDIO ON</button>
-    <button class="btn btn-sm" id="btnVoice">VOICE ON</button>
+    <button class="btn btn-sm off" id="btnAudio">AUDIO OFF</button>
+    <button class="btn btn-sm off" id="btnVoice">VOICE OFF</button>
     <button class="btn btn-sm" id="btnMode">MODE: SIM</button>
   </div>
   <button class="btn btn-secondary" id="btnDataset" style="border-color: rgba(44,232,245,0.5); color: var(--live); font-size: 11px; margin-top: 4px; font-weight: 700;">
@@ -139,8 +139,8 @@
     <div class="meter cal-meter"><div class="meter-fill" id="calFill"></div></div>
     <div class="cal-status" id="calStatus">Ready. The scan must be running.</div>
     <div class="sheet-btns">
-      <button class="btn" id="calCancel">CLOSE</button>
-      <button class="btn btn-primary" id="calStart">COLLECT SAMPLES</button>
+      <button class="btn btn-primary" id="calStart">START CALIBRATION</button>
+      <button class="btn" id="calCancel">CANCEL</button>
     </div>
     <p class="fineprint">Calibration removes fixed latency and speed-of-sound error. It does not fix beam-width ambiguity, which surface the echo came from, or classifier accuracy.</p>
   </div>
@@ -152,6 +152,24 @@
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
       <h2 style="margin: 0; font-size: 16px; color: var(--live); letter-spacing: 0.05em;">🎯 REAL ECHO DATA COLLECTOR</h2>
       <button class="btn btn-sm" id="dsClose" style="padding: 4px 10px; font-size: 11px;">✕</button>
+    </div>
+
+    <!-- Device & Orientation Guide -->
+    <div style="background: rgba(44, 232, 245, 0.07); border-left: 3px solid var(--live); padding: 8px 10px; border-radius: 4px; margin-bottom: 10px; font-size: 11px; line-height: 1.45;">
+      <div style="font-weight: 700; color: var(--live); margin-bottom: 4px;">📱 HARDWARE ORIENTATION GUIDE:</div>
+      <div>• <b>OnePlus / Motorola / Redmi:</b> Primary speaker & mic are on the <b>bottom edge</b>. Point the <b>bottom of the phone</b> directly at the target!</div>
+      <div style="margin-top: 2px;">• Hold phone by sides — <b>do NOT block the mic pinhole</b> next to USB-C port.</div>
+      <div style="margin-top: 2px;">• Set media volume to ~<b>70% - 80%</b> (avoid distortion at 100%). Audio/Voice is disabled to prevent feedback.</div>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: space-between; background: var(--surface-2); padding: 6px 10px; border-radius: 6px; margin-bottom: 10px; font-size: 11px; gap: 8px;">
+      <span style="color: var(--text-2); font-weight: 600; white-space: nowrap;">Device:</span>
+      <select id="dsDeviceSelect" style="flex: 1; background: var(--surface-1); color: var(--text-1); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; font-size: 11px;">
+        <option value="OnePlus Nord">OnePlus (Nord / 5 / etc)</option>
+        <option value="Redmi Note 13">Redmi Note 13</option>
+        <option value="Motorola">Motorola (Moto G / Edge)</option>
+        <option value="Other Android">Other Android Device</option>
+      </select>
     </div>
 
     <!-- Step Progress Tracker -->

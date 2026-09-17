@@ -46,6 +46,7 @@ const ui = {
   dsSumWall: $('dsSumWall'), dsSumSoft: $('dsSumSoft'), dsSumOpen: $('dsSumOpen'), dsSumTotal: $('dsSumTotal'),
   dsBtnSaveServer: $('dsBtnSaveServer'), dsBtnDownload: $('dsBtnDownload'), dsBtnReset: $('dsBtnReset'),
   dsTargetPills: $('dsTargetPills'),
+  dsDeviceSelect: $('dsDeviceSelect'),
 };
 
 const state = {
@@ -54,8 +55,8 @@ const state = {
   scanning: false,
   lastDetection: null,
   lastDetectionAt: 0,
-  audioOn: true,
-  voiceOn: true,
+  audioOn: false, // OFF by default to eliminate speaker interference
+  voiceOn: false, // OFF by default to eliminate speaker interference
   sweepAngle: 0,
   trail: [],                 // recent detections for the sonar's persistence
   logLines: 0,
@@ -104,6 +105,8 @@ const guidance = new GuidanceEngine({
     sendToServer: (text, level) => net && net.send('speak', { text, level }),
   },
 });
+guidance.setEnabled(false); // Default OFF to eliminate speaker acoustic feedback
+guidance.speechEnabled = false; // Default OFF to eliminate speaker acoustic feedback
 
 const calibrator = new Calibrator({
   onUpdate: (st) => renderCalibration(st),
@@ -975,11 +978,12 @@ if (ui.dsBtnSaveServer) {
       ui.dsStatus4.textContent = 'Collect at least a few samples first.';
       return;
     }
+    const dev = (ui.dsDeviceSelect && ui.dsDeviceSelect.value) || deviceInfo().platform || 'Android Phone';
     ui.dsStatus4.className = 'ds-status';
-    ui.dsStatus4.textContent = 'Uploading dataset to server...';
+    ui.dsStatus4.textContent = `Uploading ${dev} dataset to server...`;
     net.send('save_training_dataset', {
       dataset: {
-        device: deviceInfo().platform || 'OnePlus',
+        device: dev,
         samples: datasetCollector.samples,
         stats: counts,
       },
@@ -990,8 +994,9 @@ if (ui.dsBtnSaveServer) {
 if (ui.dsBtnDownload) {
   ui.dsBtnDownload.addEventListener('click', () => {
     const counts = datasetCollector.counts;
+    const dev = (ui.dsDeviceSelect && ui.dsDeviceSelect.value) || deviceInfo().platform || 'Android Phone';
     const jsonStr = JSON.stringify({
-      device: deviceInfo().platform || 'OnePlus',
+      device: dev,
       date: new Date().toISOString(),
       stats: counts,
       samples: datasetCollector.samples,
@@ -1000,7 +1005,8 @@ if (ui.dsBtnDownload) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `oneplus_real_echos_${Date.now()}.json`;
+    const safeDev = dev.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    a.download = `real_echoes_${safeDev}_${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     ui.dsStatus4.className = 'ds-status ok';
