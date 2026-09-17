@@ -84,6 +84,7 @@ class Recorder {
     for (const f of files) {
       try {
         const rec = JSON.parse(fs.readFileSync(path.join(DIR, f), 'utf8'));
+        if (!rec || !Array.isArray(rec.frames)) continue;
         const info = this.describe(rec);
         // The id is what `load()` resolves, so it must be the filename. A
         // hand-renamed or hand-edited recording would otherwise list fine and
