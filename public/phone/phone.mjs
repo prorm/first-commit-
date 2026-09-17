@@ -45,6 +45,7 @@ const ui = {
   dsStatus1: $('dsStatus1'), dsStatus2: $('dsStatus2'), dsStatus3: $('dsStatus3'), dsStatus4: $('dsStatus4'),
   dsSumWall: $('dsSumWall'), dsSumSoft: $('dsSumSoft'), dsSumOpen: $('dsSumOpen'), dsSumTotal: $('dsSumTotal'),
   dsBtnSaveServer: $('dsBtnSaveServer'), dsBtnDownload: $('dsBtnDownload'), dsBtnReset: $('dsBtnReset'),
+  dsTargetPills: $('dsTargetPills'),
 };
 
 const state = {
@@ -110,13 +111,18 @@ const calibrator = new Calibrator({
 
 class DatasetCollector {
   constructor(opts = {}) {
-    this.targetCount = 50;
+    this.targetCount = 100;
     this.samples = [];
     this.active = false;
     this.currentClass = 0; // 0: WALL, 1: SOFT, 2: OPENING
     this.currentStep = 1;
     this.onUpdate = opts.onUpdate || (() => {});
     this.onComplete = opts.onComplete || (() => {});
+  }
+
+  setTarget(n) {
+    this.targetCount = Math.max(10, Math.min(1000, Number(n) || 100));
+    this.emit();
   }
 
   startStep(step) {
@@ -569,21 +575,21 @@ function renderDatasetState(st) {
 function onDatasetStepComplete(step, count) {
   playChime(true);
   if (step === 1) {
-    ui.dsAction1.textContent = '✓ 50 WALL SAMPLES COLLECTED';
+    ui.dsAction1.textContent = `✓ ${count} WALL SAMPLES COLLECTED`;
     ui.dsAction1.disabled = false;
     ui.dsStatus1.className = 'ds-status ok';
     ui.dsStatus1.textContent = '✓ Step 1 Complete! Tap NEXT: SOFT / HUMAN →';
     ui.dsNext1.disabled = false;
     ui.dsStepTab1.classList.add('done');
   } else if (step === 2) {
-    ui.dsAction2.textContent = '✓ 50 SOFT/HUMAN SAMPLES COLLECTED';
+    ui.dsAction2.textContent = `✓ ${count} SOFT/HUMAN SAMPLES COLLECTED`;
     ui.dsAction2.disabled = false;
     ui.dsStatus2.className = 'ds-status ok';
     ui.dsStatus2.textContent = '✓ Step 2 Complete! Tap NEXT: OPENING →';
     ui.dsNext2.disabled = false;
     ui.dsStepTab2.classList.add('done');
   } else if (step === 3) {
-    ui.dsAction3.textContent = '✓ 50 OPENING SAMPLES COLLECTED';
+    ui.dsAction3.textContent = `✓ ${count} OPENING SAMPLES COLLECTED`;
     ui.dsAction3.disabled = false;
     ui.dsStatus3.className = 'ds-status ok';
     ui.dsStatus3.textContent = '✓ Step 3 Complete! Tap NEXT: REVIEW & SAVE →';
@@ -870,6 +876,17 @@ if (ui.btnDataset) {
   ui.btnDataset.addEventListener('click', () => {
     ui.datasetSheet.hidden = false;
     showDatasetStep(1);
+  });
+}
+
+if (ui.dsTargetPills) {
+  ui.dsTargetPills.addEventListener('click', (e) => {
+    const pill = e.target.closest('button[data-target]');
+    if (!pill) return;
+    Array.from(ui.dsTargetPills.children).forEach(p => p.classList.remove('on'));
+    pill.classList.add('on');
+    const n = parseInt(pill.dataset.target, 10);
+    datasetCollector.setTarget(n);
   });
 }
 

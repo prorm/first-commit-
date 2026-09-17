@@ -1,12 +1,13 @@
 /**
  * Train / Fine-tune EchoNet on real OnePlus echo recordings.
  *
- * Combines real hardware pulse signatures with synthetic acoustic rehearsal
- * to prevent catastrophic forgetting, achieving high accuracy on both real
- * phone hardware and the digital twin simulator.
+ * Automatically aggregates all collected real recordings from recordings/
+ * and trains EchoNet directly on physical hardware acoustic signatures.
  *
  * Usage:
- *   node scripts/train-real.mjs [path_to_dataset.json]
+ *   node scripts/train-real.mjs                     # Auto-pools all recordings/real_*.json
+ *   node scripts/train-real.mjs --pure-real         # Train 100% on real phone echoes (no synth)
+ *   node scripts/train-real.mjs [path_to_file.json] # Train on a specific file
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -110,25 +111,64 @@ function forwardModel(input, W) {
   return { logits, probs, classIndex: best, className: CLASSES[best], confidence: probs[best] };
 }
 
+function loadAllRealDatasets(specificPath) {
+  if (specificPath && fs.existsSync(specificPath) && specificPath.endsWith('.json')) {
+    const raw = JSON.parse(fs.readFileSync(specificPath, 'utf8'));
+    return { files: [path.basename(specificPath)], samples: Array.isArray(raw.samples) ? raw.samples : [] };
+  }
+
+  if (!fs.existsSync(RECORDINGS_DIR)) return { files: [], samples: [] };
+
+  const allFiles = fs.readdirSync(RECORDINGS_DIR).filter(
+    (f) => f.startsWith('real_') && f.endsWith('.json')
+  );
+
+  const seen = new Set();
+  const samples = [];
+  const loadedFiles = [];
+
+  for (const f of allFiles) {
+    try {
+      const fullPath = path.join(RECORDINGS_DIR, f);
+      const data = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+      if (Array.isArray(data.samples)) {
+        let addedFromThis = 0;
+        for (const s of data.samples) {
+          const id = s.t ? `${s.t}_${s.classIndex}` : (Array.isArray(s.window) ? s.window.slice(0, 8).join(',') : null);
+          if (id && !seen.has(id)) {
+            seen.add(id);
+            samples.push(s);
+            addedFromThis++;
+          }
+        }
+        loadedFiles.push(`${f} (${addedFromThis} unique pulses)`);
+      }
+    } catch (e) {
+      /* skip invalid file */
+    }
+  }
+
+  return { files: loadedFiles, samples };
+}
+
 async function main() {
-  const targetPath = process.argv[2] || LATEST_DATASET;
+  const args = process.argv.slice(2);
+  const isPureReal = args.includes('--pure-real') || args.includes('--no-synth');
+  const pathArg = args.find((a) => !a.startsWith('--'));
+
   console.log('================================================================');
   console.log('  ECHONET REAL DATA TRAINER & CALIBRATOR');
   console.log('================================================================\n');
 
-  if (!fs.existsSync(targetPath)) {
-    console.log(`[!] No real dataset found at: ${targetPath}\n`);
-    process.exit(1);
-  }
+  const { files, samples } = loadAllRealDatasets(pathArg);
 
-  const raw = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
-  const samples = Array.isArray(raw.samples) ? raw.samples : [];
-  console.log(`Loaded dataset from: ${targetPath}`);
-  console.log(`Device: ${raw.device || 'Android'} | Date: ${raw.created_at || raw.date || 'Unknown'}`);
-  console.log(`Total real pulses: ${samples.length}\n`);
+  console.log(`Discovered ${files.length} real dataset file(s) in recordings/:`);
+  files.forEach((f) => console.log(`  - ${f}`));
+  console.log(`Total unique real pulses: ${samples.length}\n`);
 
   if (samples.length < 6) {
-    console.error('[Error] Dataset has fewer than 6 samples.');
+    console.error('[Error] Dataset has fewer than 6 real samples.');
+    console.error('Record pulses on your OnePlus phone via the DATASET button first!');
     process.exit(1);
   }
 
@@ -139,7 +179,7 @@ async function main() {
     }
   }
 
-  console.log('Class Breakdown:');
+  console.log('Class Breakdown (Real Hardware Echoes):');
   CLASSES.forEach((name, i) => {
     console.log(`  Class ${i} (${name.padEnd(7)}): ${classSamples[i].length} real samples`);
   });
@@ -163,23 +203,28 @@ async function main() {
   printConfusion(baseCm, classSamples.map((s) => s.length));
   console.log(`Baseline Real Accuracy: ${((baseCorrect / totalEval) * 100).toFixed(1)} %\n`);
 
-  // 2. Synthesize rehearsal pulses to prevent forgetting simulation physics
-  console.log('--- 2. PREPARING CALIBRATION DATASET ---');
+  // 2. Training configuration
   let synthPulses = [];
-  try {
-    const { synthesizePulse } = await import('../public/shared/echosynth.mjs');
-    let seed = 20260917;
-    const rng = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
-    for (let ci = 0; ci < 3; ci++) {
-      for (let k = 0; k < 60; k++) {
-        const r = 0.5 + rng() * 3.0;
-        const p = synthesizePulse(CLASSES[ci], r, rng, {});
-        synthPulses.push({ win: p.win, classIndex: ci });
+  if (isPureReal) {
+    console.log('--- 2. PURE REAL DATA TRAINING MODE (--pure-real) ---');
+    console.log('✓ Training 100% on real OnePlus phone acoustic signatures. Synthetic rehearsal disabled.');
+  } else {
+    console.log('--- 2. PREPARING REHEARSAL BUFFER ---');
+    try {
+      const { synthesizePulse } = await import('../public/shared/echosynth.mjs');
+      let seed = 20260917;
+      const rng = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+      for (let ci = 0; ci < 3; ci++) {
+        for (let k = 0; k < 60; k++) {
+          const r = 0.5 + rng() * 3.0;
+          const p = synthesizePulse(CLASSES[ci], r, rng, {});
+          synthPulses.push({ win: p.win, classIndex: ci });
+        }
       }
+      console.log(`✓ Synthesized ${synthPulses.length} acoustic rehearsal pulses for cross-domain stability.`);
+    } catch (e) {
+      console.log(`[Note] Could not synthesize rehearsal pulses (${e.message}), training on real data only.`);
     }
-    console.log(`✓ Synthesized ${synthPulses.length} acoustic rehearsal pulses for cross-domain stability.`);
-  } catch (e) {
-    console.log(`[Note] Could not synthesize rehearsal pulses (${e.message}), training on real data only.`);
   }
 
   // 3. Fine-tune dense layers on real hardware acoustics
@@ -270,7 +315,7 @@ function fineTune(W, classSamples, synthPulses = []) {
     }
   }
 
-  // Add synthetic rehearsal pulses
+  // Add synthetic rehearsal pulses if enabled
   for (const p of synthPulses) {
     dataset.push({ feat: extractGap(p.win, W), y: p.classIndex });
   }
@@ -283,7 +328,7 @@ function fineTune(W, classSamples, synthPulses = []) {
   const m_fc2_w = new Float32Array(3 * 16), v_fc2_w = new Float32Array(3 * 16);
   const m_fc2_b = new Float32Array(3), v_fc2_b = new Float32Array(3);
 
-  const classWeights = [1.2, 1.0, 1.2]; // Boost WALL and OPENING
+  const classWeights = [1.2, 1.0, 1.2]; // Balanced penalty
   const baseLr = 0.005;
   const beta1 = 0.9, beta2 = 0.999, eps = 1e-8;
   const epochs = 260;
@@ -414,7 +459,6 @@ function exportWeightsJs(W, valAcc, cm) {
     return 'new Float32Array([' + Array.from(a).map((v) => Number(v.toFixed(7))).join(',') + '])';
   }
 
-  // Compute test vector reference logits for selfTest
   const TEST_INPUT = new Float32Array([0,0,0,0,0,0,0,0.0108999452,0.037922129,0.0667835474,0.0983117521,0.133043051,0.170911208,0.211845204,0.256027848,0.303428262,0.353743494,0.406493872,0.461077005,0.516800106,0.572906077,0.628599703,0.68307215,0.735519409,0.785156131,0.831223488,0.872996926,0.909794867,0.940991044,0.966028869,0.984438419,0.995849192,1,0.996739566,0.986023128,0.967912734,0.94257462,0.910271645,0.871587753,0.827645957,0.779708624,0.728913665,0.676213741,0.621964276,0.566521466,0.511875749,0.45908159,0.408597589,0.360343665,0.314965606,0.273152083,0.235109001,0.200834021,0.169709072,0.140887573,0.11536023,0.0932381973,0.0741453394,0.0562922768,0.0411427319,0.0287302788,0.019015884,0.0119077759,0.00721103186]);
   const testOut = forwardModel(TEST_INPUT, W);
   const testLogitsStr = '[' + Array.from(testOut.logits).map(v => Number(v.toFixed(7))).join(',') + ']';
@@ -551,7 +595,7 @@ function exportWeightsJs(W, valAcc, cm) {
   fs.writeFileSync(VENDOR_WEIGHTS, js, 'utf8');
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('[!] Training failed:', err);
   process.exit(1);
 });
