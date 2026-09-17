@@ -181,13 +181,18 @@
     </div>
 
     <!-- Pulses Per Class Selector -->
-    <div style="display: flex; align-items: center; justify-content: space-between; background: var(--surface-2); padding: 6px 10px; border-radius: 6px; margin-bottom: 12px; font-size: 11px;">
-      <span style="color: var(--text-2); font-weight: 600;">Pulses per class:</span>
-      <div class="pill-group" id="dsTargetPills">
-        <button class="pill" data-target="50">50</button>
-        <button class="pill on" data-target="100">100</button>
-        <button class="pill" data-target="200">200</button>
-        <button class="pill" data-target="300">300</button>
+    <div style="background: var(--surface-2); padding: 8px 10px; border-radius: 6px; margin-bottom: 12px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-size: 11px;">
+        <span style="color: var(--text-1); font-weight: 700;">🎯 Pulses Per Target:</span>
+        <div class="pill-group" id="dsTargetPills">
+          <button class="pill" data-target="100">100 (5s)</button>
+          <button class="pill on" data-target="250">250 (12s)</button>
+          <button class="pill" data-target="500">500 (25s)</button>
+          <button class="pill" data-target="1000">1000 (50s)</button>
+        </div>
+      </div>
+      <div style="font-size: 10px; color: var(--text-3);">
+        ⚡ Higher pulse count + moving across distances (0.5m – 3m) = ultra-accurate model!
       </div>
     </div>
 
