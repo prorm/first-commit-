@@ -1,0 +1,266 @@
+/*
+ * SentryShield shared visual language.
+ *
+ * Instrument, not dashboard: near-black ground, thin technical rules, one
+ * luminous accent that means "live sensor data", and type that is legible at
+ * arm's length in a dark room.  Restraint is the point — glow is reserved for
+ * things the sensor actually measured, so it carries meaning instead of
+ * decoration.
+ */
+:root {
+  /* ground */
+  --bg:        #04070c;
+  --bg-2:      #070b13;
+  --panel:     rgba(10, 16, 26, 0.72);
+  --panel-2:   rgba(14, 22, 36, 0.88);
+  --line:      rgba(86, 130, 170, 0.16);
+  --line-2:    rgba(86, 130, 170, 0.30);
+
+  /* type */
+  --text:      #e8eff7;
+  --text-2:    #8ea3bb;
+  --text-3:    #55677e;
+
+  /* sensor accents — cyan is "measured now", amber is "uncertain",
+     red is "close", violet is "inferred geometry" */
+  --live:      #2ce8f5;
+  --live-dim:  rgba(44, 232, 245, 0.16);
+  --wall:      #4ea8ff;
+  --soft:      #ffb454;
+  --opening:   #9b8cff;
+  --warn:      #ffb454;
+  --danger:    #ff5d5d;
+  --ok:        #45e08a;
+  --infer:     #b39dff;
+
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, system-ui, sans-serif;
+
+  --r: 3px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* A faint grid beneath everything: technical, not decorative, and it gives
+   the glowing layers something to sit on. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    linear-gradient(transparent 95%, rgba(86, 130, 170, 0.055) 95%) 0 0 / 100% 28px,
+    linear-gradient(90deg, transparent 95%, rgba(86, 130, 170, 0.055) 95%) 0 0 / 28px 100%,
+    radial-gradient(1100px 620px at 50% -10%, rgba(44, 232, 245, 0.045), transparent 70%);
+}
+
+/* ---- type scale ------------------------------------------------------- */
+h1, h2, h3 { font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; }
+h1 { font-size: 13px; }
+h2 { font-size: 12px; color: var(--live); }
+
+.mono { font-family: var(--mono); }
+.dim  { color: var(--text-2); }
+.dimmer { color: var(--text-3); }
+
+.label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ---- the brand mark: a sonar pulse ----------------------------------- */
+.mark {
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  background: var(--live);
+  box-shadow: 0 0 0 0 rgba(44, 232, 245, 0.55);
+  animation: pulse 2.4s ease-out infinite;
+  flex: 0 0 auto;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(44, 232, 245, 0.5); }
+  70%  { box-shadow: 0 0 0 11px rgba(44, 232, 245, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(44, 232, 245, 0); }
+}
+
+/* ---- buttons --------------------------------------------------------- */
+.btn {
+  appearance: none;
+  border: 1px solid var(--line-2);
+  background: var(--panel-2);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 13px 14px;
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.08s;
+  min-height: 46px;
+  width: 100%;
+  text-align: center;
+}
+.btn:active { transform: scale(0.985); }
+.btn:hover { border-color: rgba(44, 232, 245, 0.45); }
+.btn:focus-visible { outline: 1px solid var(--live); outline-offset: 2px; }
+
+.btn-primary {
+  border-color: rgba(44, 232, 245, 0.5);
+  background: linear-gradient(180deg, rgba(44, 232, 245, 0.16), rgba(44, 232, 245, 0.05));
+  color: #d6fbff;
+  font-weight: 600;
+}
+.btn-primary.on {
+  border-color: rgba(255, 93, 93, 0.5);
+  background: linear-gradient(180deg, rgba(255, 93, 93, 0.16), rgba(255, 93, 93, 0.05));
+  color: #ffdede;
+}
+.btn-lg { min-height: 58px; font-size: 13px; }
+.btn-sm { min-height: 40px; padding: 9px 8px; font-size: 10.5px; letter-spacing: 0.1em; }
+.btn.off { color: var(--text-3); border-color: var(--line); }
+.btn[disabled] { opacity: 0.35; pointer-events: none; }
+
+/* ---- panels ---------------------------------------------------------- */
+.panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: var(--r);
+  position: relative;
+  z-index: 1;
+}
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--line);
+}
+.panel-head b { color: var(--text-2); font-weight: 600; }
+.panel-note {
+  padding: 8px 11px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+/* ---- meters ---------------------------------------------------------- */
+.meter {
+  height: 4px;
+  background: rgba(86, 130, 170, 0.14);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.meter-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--live);
+  box-shadow: 0 0 8px rgba(44, 232, 245, 0.5);
+  transition: width 0.22s ease, background 0.3s;
+}
+.meter-fill.low  { background: var(--danger); box-shadow: 0 0 8px rgba(255, 93, 93, 0.45); }
+.meter-fill.mid  { background: var(--warn);   box-shadow: 0 0 8px rgba(255, 180, 84, 0.45); }
+
+/* ---- connection chip ------------------------------------------------- */
+.chip {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  padding: 3px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.conn .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+  transition: background 0.25s, box-shadow 0.25s;
+}
+.conn.connected .dot { background: var(--ok); box-shadow: 0 0 7px var(--ok); }
+.conn.connected { color: var(--ok); }
+.conn.connecting .dot, .conn.reconnecting .dot { background: var(--warn); box-shadow: 0 0 7px var(--warn); animation: blink 0.9s steps(2) infinite; }
+.conn.connecting, .conn.reconnecting { color: var(--warn); }
+.conn.offline .dot { background: var(--danger); }
+.conn.offline { color: var(--danger); }
+@keyframes blink { 50% { opacity: 0.25; } }
+
+/* ---- class colours, used identically on both screens ----------------- */
+.c-WALL    { color: var(--wall); }
+.c-SOFT    { color: var(--soft); }
+.c-OPENING { color: var(--opening); }
+.c-none    { color: var(--text-3); }
+
+/* ---- sheets (modal overlays) ----------------------------------------- */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(2, 4, 8, 0.93);
+  backdrop-filter: blur(7px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(18px, env(safe-area-inset-top, 0px)) 18px max(18px, env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+}
+.sheet[hidden] { display: none; }
+.sheet-inner {
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid var(--line-2);
+  background: linear-gradient(180deg, rgba(12, 19, 31, 0.97), rgba(6, 10, 17, 0.97));
+  border-radius: 4px;
+  padding: 22px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+.sheet-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fineprint { font-size: 10.5px; color: var(--text-3); line-height: 1.55; }
+
+/* ---- utility --------------------------------------------------------- */
+[hidden] { display: none !important; }
+.sep { color: var(--text-3); margin: 0 6px; }
+a { color: var(--live); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

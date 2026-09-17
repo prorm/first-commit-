@@ -1,0 +1,157 @@
+/* Diagnostics: a readable report, not a dashboard. Works at phone width. */
+body {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: max(14px, env(safe-area-inset-top, 0px)) 16px max(20px, env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 1;
+}
+.dbar .brand { display: flex; align-items: center; gap: 9px; }
+.dbar h1 { color: var(--live); font-size: 12px; }
+.dbar nav { display: flex; gap: 14px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; }
+
+.intro {
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+  max-width: 72ch;
+  position: relative;
+  z-index: 1;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(146px, 1fr));
+  gap: 7px;
+  position: relative;
+  z-index: 1;
+}
+
+.verdict {
+  border: 1px solid var(--line-2);
+  border-left-width: 3px;
+  background: var(--panel);
+  padding: 11px 13px;
+  border-radius: var(--r);
+  font-size: 12.5px;
+  line-height: 1.6;
+  position: relative;
+  z-index: 1;
+}
+.verdict.ok   { border-left-color: var(--ok); }
+.verdict.warn { border-left-color: var(--warn); }
+.verdict.err  { border-left-color: var(--danger); }
+.verdict b { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; margin-bottom: 5px; text-transform: uppercase; }
+.verdict.ok b { color: var(--ok); }
+.verdict.warn b { color: var(--warn); }
+.verdict.err b { color: var(--danger); }
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+}
+.card {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: var(--r);
+  padding: 11px 13px 13px;
+}
+.card.wide { grid-column: 1 / -1; }
+.card h2 {
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  color: var(--text-3);
+  margin-bottom: 9px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--line);
+}
+
+.rows { display: flex; flex-direction: column; }
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(86, 130, 170, 0.07);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.row:last-child { border-bottom: none; }
+.row .k { color: var(--text-3); letter-spacing: 0.06em; flex: 0 1 auto; }
+.row .v { color: var(--text); text-align: right; font-weight: 500; letter-spacing: 0.04em; }
+.row .v.ok    { color: var(--ok); }
+.row .v.warn  { color: var(--warn); }
+.row .v.err   { color: var(--danger); }
+.row .v.info  { color: var(--live); }
+.row .v.idle  { color: var(--text-3); }
+.row .note {
+  flex: 1 1 100%;
+  font-family: var(--sans);
+  font-size: 10.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin-top: 2px;
+}
+.row.stack { flex-wrap: wrap; }
+
+.scope-canvas {
+  display: block;
+  width: 100%;
+  height: 132px;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: #04070c;
+}
+.scope-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+
+.out {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.65;
+  max-height: 320px;
+  overflow-y: auto;
+  color: var(--text-2);
+}
+.out .l { display: flex; gap: 9px; }
+.out .l .t { color: var(--text-3); flex: 0 0 auto; }
+.out .l.pass .m { color: var(--ok); }
+.out .l.fail .m { color: var(--danger); }
+.out .l.warn .m { color: var(--warn); }
+.out .l.head .m { color: var(--live); letter-spacing: 0.12em; }
+
+.dfoot {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+  text-align: center;
+  padding-top: 6px;
+  position: relative;
+  z-index: 1;
+}

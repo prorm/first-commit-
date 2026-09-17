@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#04070c">
+<link rel="icon" type="image/svg+xml" href="../assets/icon.svg">
+<title>SentryShield — Diagnostics</title>
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="diagnostics.css">
+</head>
+<body>
+
+<header class="dbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <h1>SENTRYSHIELD — DIAGNOSTICS</h1>
+  </div>
+  <nav><a href="../phone/">SENSOR</a><a href="../map/">MAP</a></nav>
+</header>
+
+<p class="intro">
+  Run this on the phone you intend to demo with. It reports what the browser
+  will actually grant, exercises each subsystem independently, and tells you
+  which mode to fall back to if something is unavailable. Nothing here changes
+  the app's state.
+</p>
+
+<div class="actions">
+  <button class="btn btn-primary" id="btnSelfTest">RUN SELF TEST</button>
+  <button class="btn" id="btnChirp">TEST CHIRP</button>
+  <button class="btn" id="btnMic">TEST MICROPHONE</button>
+  <button class="btn" id="btnOrient">TEST ORIENTATION</button>
+  <button class="btn" id="btnWs">TEST WEBSOCKET</button>
+  <button class="btn" id="btnLoop">TEST FULL LOOP</button>
+</div>
+
+<div class="verdict" id="verdict" hidden></div>
+
+<main class="cards">
+  <section class="card">
+    <h2>SENSOR SUBSYSTEMS</h2>
+    <div class="rows" id="rowsCore"></div>
+  </section>
+
+  <section class="card">
+    <h2>PLATFORM</h2>
+    <div class="rows" id="rowsPlatform"></div>
+  </section>
+
+  <section class="card">
+    <h2>CLASSIFIER</h2>
+    <div class="rows" id="rowsClassifier"></div>
+  </section>
+
+  <section class="card">
+    <h2>SERVER &amp; AWS</h2>
+    <div class="rows" id="rowsServer"></div>
+  </section>
+
+  <section class="card wide">
+    <h2>LIVE READINGS</h2>
+    <div class="rows" id="rowsLive"></div>
+    <canvas id="scope" class="scope-canvas"></canvas>
+    <div class="scope-legend">
+      <span>matched-filter range profile after clutter subtraction</span>
+      <span id="scopeMeta">idle</span>
+    </div>
+  </section>
+
+  <section class="card wide">
+    <h2>TEST OUTPUT</h2>
+    <div class="out" id="out"></div>
+  </section>
+</main>
+
+<footer class="dfoot">
+  SentryShield research prototype · protocol v1 ·
+  <a href="/docs/DEMO.md">DEMO.md</a> ·
+  <a href="/docs/ARCHITECTURE.md">ARCHITECTURE.md</a> ·
+  <a href="/docs/STATUS.md">STATUS.md</a>
+</footer>
+
+<script src="../vendor/echonet_weights.js"></script>
+<script type="module" src="diagnostics.mjs"></script>
+</body>
+</html>

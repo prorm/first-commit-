@@ -1,0 +1,13 @@
+node_modules/
+.env
+key.pem
+cert.pem
+
+# Scan recordings are demo artefacts: keep the directory, not the contents.
+# One reference scan is committed deliberately (see recordings/README.md).
+recordings/*.json
+!recordings/reference-*.json
+
+# Browser-check and hero screenshots are regenerated on demand.
+scripts/shot-*.png
+scripts/hero-*.png

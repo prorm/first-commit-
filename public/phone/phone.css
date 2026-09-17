@@ -1,0 +1,298 @@
+/*
+ * Phone sensor layout.
+ *
+ * Designed to be used while actually holding the phone and walking: the two
+ * numbers that matter are large enough to read without focusing, controls sit
+ * in the lower half within thumb reach, and nothing important is near the
+ * top edge where a hand covers it.
+ */
+body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: max(8px, env(safe-area-inset-top, 0px)) 10px max(10px, env(safe-area-inset-bottom, 0px));
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 2px;
+  position: relative;
+  z-index: 1;
+}
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand h1 { color: var(--live); }
+.bar-right { display: flex; align-items: center; gap: 7px; }
+
+.statusline {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--text-3);
+  text-transform: uppercase;
+  padding: 0 2px;
+  display: flex;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+.statusline.active { color: var(--live); }
+
+/* ---- readouts -------------------------------------------------------- */
+.readout {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+.ro-col { display: flex; flex-direction: column; gap: 8px; }
+.ro {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: var(--r);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 0;
+}
+.ro-main { padding: 14px 14px 12px; }
+.ro-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+.ro-value {
+  font-family: var(--mono);
+  font-size: 46px;
+  line-height: 1.02;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  transition: color 0.25s;
+  /* The unit is inline; without this it wraps onto its own line at "--". */
+  white-space: nowrap;
+}
+.ro-value.small { font-size: 23px; font-weight: 400; letter-spacing: 0; }
+.ro-value .unit { font-size: 0.42em; color: var(--text-3); margin-left: 3px; letter-spacing: 0.05em; }
+.ro-value.live { color: var(--live); text-shadow: 0 0 18px rgba(44, 232, 245, 0.35); }
+.ro-value.near { color: var(--warn); text-shadow: 0 0 18px rgba(255, 180, 84, 0.3); }
+.ro-value.close { color: var(--danger); text-shadow: 0 0 20px rgba(255, 93, 93, 0.35); }
+.ro-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.05em;
+  min-height: 14px;
+}
+
+/* ---- confidence ------------------------------------------------------ */
+.confbar {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: var(--r);
+  padding: 9px 11px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  position: relative;
+  z-index: 1;
+}
+.confbar-head {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+.confbar-head span:last-child { color: var(--text-2); }
+.probs { display: flex; flex-direction: column; gap: 3px; }
+.prow {
+  display: grid;
+  grid-template-columns: 58px 1fr 34px;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+}
+.prow .pbar { height: 3px; background: rgba(86, 130, 170, 0.14); border-radius: 2px; overflow: hidden; }
+.prow .pbar i { display: block; height: 100%; width: 0%; transition: width 0.25s ease; }
+.prow .pval { text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.prow.win .pname { font-weight: 600; }
+.prow.win .pval { color: var(--text); }
+
+/* ---- sonar ----------------------------------------------------------- */
+.scope {
+  position: relative;
+  z-index: 1;
+  border: 1px solid var(--line);
+  background: radial-gradient(circle at 50% 100%, rgba(44, 232, 245, 0.05), transparent 65%), var(--panel);
+  border-radius: var(--r);
+  overflow: hidden;
+  /* Half-circle sonar: the sensor only looks forward, so the display does too. */
+  aspect-ratio: 2 / 1.12;
+  min-height: 160px;
+}
+.scope canvas { display: block; width: 100%; height: 100%; }
+.scope-tags {
+  position: absolute;
+  left: 9px; right: 9px; top: 8px;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--text-3);
+  pointer-events: none;
+  text-transform: uppercase;
+}
+
+/* ---- controls -------------------------------------------------------- */
+.controls { display: flex; flex-direction: column; gap: 7px; position: relative; z-index: 1; }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.controls .btn-row:last-child { grid-template-columns: 1fr 1fr 1fr; }
+
+.pose-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 6px;
+  padding: 9px;
+}
+
+.cue {
+  padding: 11px;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text);
+  min-height: 42px;
+}
+.cue.critical { color: var(--danger); }
+.cue.warning { color: var(--warn); }
+.cue.info { color: var(--live); }
+.cue.ambient { color: var(--text-2); }
+
+/* ---- log ------------------------------------------------------------- */
+.log {
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.panel.collapsed .log { display: none; }
+.panel.collapsed .panel-head { border-bottom: none; }
+#logToggle { cursor: pointer; }
+.log-line { display: flex; gap: 7px; }
+.log-line .t { color: var(--text-3); flex: 0 0 auto; }
+.log-line.error .m { color: var(--danger); }
+.log-line.warn .m { color: var(--warn); }
+.log-line.success .m { color: var(--ok); }
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px 2px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  color: var(--text-3);
+  text-transform: uppercase;
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- calibration / gate sheets --------------------------------------- */
+.steps { padding-left: 18px; font-size: 12.5px; color: var(--text-2); line-height: 1.7; }
+.steps li { margin-bottom: 3px; }
+.dist-row { display: flex; flex-direction: column; gap: 7px; }
+.dist-row label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.2em; color: var(--text-3); }
+.dist-choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.dist-choices button {
+  appearance: none;
+  border: 1px solid var(--line-2);
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 9px 2px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.dist-choices button.on { border-color: var(--live); color: var(--live); background: var(--live-dim); }
+#calDist {
+  appearance: none;
+  border: 1px solid var(--line-2);
+  background: rgba(4, 7, 12, 0.85);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 15px;
+  padding: 11px;
+  border-radius: 2px;
+  width: 100%;
+  text-align: center;
+}
+.cal-meter { height: 6px; }
+.cal-status { font-family: var(--mono); font-size: 11px; color: var(--text-2); min-height: 32px; line-height: 1.5; }
+.cal-status.ok { color: var(--ok); }
+.cal-status.warn { color: var(--warn); }
+.cal-status.err { color: var(--danger); }
+
+.gate-mark {
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  border: 1px solid rgba(44, 232, 245, 0.5);
+  position: relative;
+  margin-bottom: 4px;
+}
+.gate-mark::after {
+  content: "";
+  position: absolute;
+  inset: 13px;
+  border-radius: 50%;
+  background: var(--live);
+  box-shadow: 0 0 20px rgba(44, 232, 245, 0.6);
+  animation: pulse 2.2s ease-out infinite;
+}
+.gate-copy { font-size: 13px; color: var(--text-2); line-height: 1.6; }
+.gate-caps { display: flex; flex-direction: column; gap: 4px; }
+.gate-cap {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+}
+.gate-cap b { font-weight: 600; }
+.gate-cap.yes b { color: var(--ok); }
+.gate-cap.no b { color: var(--danger); }
+.gate-cap.maybe b { color: var(--warn); }
+
+/* Short phones: shrink the hero number rather than pushing controls off. */
+@media (max-height: 720px) {
+  .ro-value { font-size: 38px; }
+  .scope { min-height: 130px; aspect-ratio: 2 / 0.95; }
+  .log { max-height: 100px; }
+}
+@media (max-height: 620px) {
+  .ro-value { font-size: 32px; }
+  .scope { display: none; }
+}

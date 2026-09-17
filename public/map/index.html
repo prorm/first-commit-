@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#04070c">
+<link rel="icon" type="image/svg+xml" href="../assets/icon.svg">
+<title>SentryShield — Command Center</title>
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="map.css">
+</head>
+<body>
+
+<!-- The map IS the interface. Everything else floats over it. -->
+<canvas id="stage"></canvas>
+
+<div class="vignette" aria-hidden="true"></div>
+
+<!-- top left: identity + link state -->
+<div class="hud hud-tl">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <h1>SENTRYSHIELD</h1>
+    <span class="chip" id="modeChip">SIMULATION</span>
+  </div>
+  <div class="tl-row">
+    <span class="conn" id="connChip"><i class="dot"></i><span id="connText">OFFLINE</span></span>
+    <span class="dimmer mono" id="linkMeta">--</span>
+  </div>
+  <div class="mission-line" id="missionLine">ENVIRONMENT: UNKNOWN &nbsp;·&nbsp; ACOUSTIC SCAN: IDLE</div>
+</div>
+
+<!-- top right: the numbers that describe the scan -->
+<div class="hud hud-tr">
+  <div class="stat-grid" id="statGrid"></div>
+  <div class="recon-line" id="reconLine">RECONSTRUCTION — NOT YET RUN</div>
+</div>
+
+<!-- bottom left: the AI panel. Real model output, shown with its uncertainty. -->
+<div class="hud hud-bl panel-ai" id="aiPanel">
+  <div class="ai-head">
+    <span>AI ECHO CLASSIFIER</span>
+    <span class="dimmer" id="aiMeta">EchoNet</span>
+  </div>
+  <div class="ai-probs" id="aiProbs"></div>
+  <div class="ai-decision">
+    <div class="ai-hist" id="aiHist"></div>
+    <div class="ai-verdict">
+      <span class="label">DECISION</span>
+      <span id="aiVerdict" class="c-none">--</span>
+    </div>
+  </div>
+  <div class="ai-note" id="aiNote">Waiting for echoes.</div>
+</div>
+
+<!-- bottom right: operator controls -->
+<div class="hud hud-br">
+  <div class="ctl-main">
+    <button class="btn btn-primary btn-lg" id="btnMission">START MISSION</button>
+  </div>
+  <div class="ctl-row">
+    <button class="btn" id="btnZero">ZERO VISIBILITY</button>
+    <button class="btn" id="btnRecon">RECONSTRUCT</button>
+  </div>
+  <div class="ctl-row">
+    <button class="btn btn-sm" id="btnReplay">REPLAY LAST</button>
+    <button class="btn btn-sm" id="btnRecord">RECORD</button>
+    <button class="btn btn-sm" id="btnFit">FIT VIEW</button>
+  </div>
+  <div class="ctl-row">
+    <select class="sel" id="selMode" aria-label="Data source mode">
+      <option value="simulation">SIMULATION</option>
+      <option value="live">LIVE PHONE</option>
+      <option value="hybrid">HYBRID</option>
+    </select>
+    <select class="sel" id="selScenario" aria-label="Simulation scenario"></select>
+  </div>
+  <div class="ctl-row layers" id="layerRow">
+    <label><input type="checkbox" id="layGrid" checked><span>GRID</span></label>
+    <label><input type="checkbox" id="layCloud" checked><span>ECHOES</span></label>
+    <label><input type="checkbox" id="laySurf" checked><span>SURFACES</span></label>
+    <label><input type="checkbox" id="layTruth"><span>TRUTH</span></label>
+  </div>
+</div>
+
+<!-- guidance ticker: what the operator is hearing, and from which voice -->
+<div class="hud ticker" id="ticker">
+  <span class="tick-label" id="voiceLabel">VOICE: LOCAL FALLBACK</span>
+  <span class="tick-text" id="cueText">Standing by.</span>
+</div>
+
+<!-- zero-visibility banner -->
+<div class="zv-banner" id="zvBanner" hidden>
+  <div class="zv-line">OPTICAL VISIBILITY <b>0%</b></div>
+  <div class="zv-line">ACOUSTIC PERCEPTION <b class="on">ACTIVE</b></div>
+</div>
+
+<!-- reconstruction title card, shown during the transition -->
+<div class="recon-card" id="reconCard" hidden>
+  <div class="rc-title">ACOUSTIC ENVIRONMENT RECONSTRUCTION</div>
+  <div class="rc-meter"><div id="rcFill"></div></div>
+  <div class="rc-sub" id="rcSub">fusing echo cloud into inferred surfaces</div>
+</div>
+
+<!-- mission summary -->
+<div class="sheet" id="summarySheet" hidden>
+  <div class="sheet-inner summary">
+    <h2>MISSION COMPLETE</h2>
+    <div class="sum-grid" id="sumGrid"></div>
+    <div class="sum-ai" id="sumAi" hidden>
+      <div class="label">AMAZON BEDROCK — SCAN INTERPRETATION</div>
+      <p id="sumAiText"></p>
+    </div>
+    <div class="sum-caveats">
+      <div class="label">LIMITS OF THIS SCAN</div>
+      <ul id="sumCaveats"></ul>
+    </div>
+    <div class="sheet-btns">
+      <button class="btn" id="sumClose">CLOSE</button>
+      <button class="btn btn-primary" id="sumReplay">REPLAY THIS SCAN</button>
+    </div>
+  </div>
+</div>
+
+<!-- replay progress -->
+<div class="replay-bar" id="replayBar" hidden>
+  <span class="mono" id="replayLabel">REPLAY</span>
+  <div class="replay-track"><div id="replayFill"></div></div>
+  <button class="btn btn-sm" id="replayStop">STOP</button>
+</div>
+
+<script src="../vendor/echonet_weights.js"></script>
+<script type="module" src="map.mjs"></script>
+</body>
+</html>

@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>PITCHBLACK — Ultrasonic Radar</title>
+  <style>
+    :root {
+      --bg-dark: #070a11;
+      --panel-bg: rgba(14, 21, 37, 0.9);
+      --border-color: rgba(56, 189, 248, 0.25);
+      --cyan-glow: #00f0ff;
+      --lime-glow: #39ff14;
+      --amber-glow: #ffb703;
+      --danger: #ef4444;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+      gap: 10px;
+      overflow-x: hidden;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: var(--panel-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand h1 {
+      font-size: 1.05rem;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      color: var(--cyan-glow);
+      text-transform: uppercase;
+      text-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+    }
+
+    .brand .badge {
+      font-size: 0.65rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(0, 240, 255, 0.15);
+      color: var(--cyan-glow);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      font-weight: 700;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #475569;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+
+    .status-dot.active {
+      background: var(--lime-glow);
+      box-shadow: 0 0 8px var(--lime-glow);
+    }
+
+    /* HUD */
+    .hud-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .hud-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .hud-label {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+
+    .hud-val {
+      font-size: 1.25rem;
+      font-weight: 900;
+      font-family: monospace;
+      color: var(--cyan-glow);
+    }
+
+    .hud-val.good { color: var(--lime-glow); }
+
+    /* Telemetry */
+    .diag-strip {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.68rem;
+      font-family: monospace;
+      padding: 4px 8px;
+      background: rgba(14, 21, 37, 0.6);
+      border-radius: 4px;
+      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .diag-strip span b { color: var(--text-main); }
+    .diag-strip span.ok b { color: var(--lime-glow); }
+
+    /* Canvas Scope */
+    .scope-container {
+      position: relative;
+      flex: 1;
+      min-height: 270px;
+      background: #03060c;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.9);
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .scope-overlay {
+      position: absolute;
+      top: 6px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      font-family: monospace;
+      font-size: 0.72rem;
+    }
+
+    .overlay-badge {
+      background: rgba(3, 6, 12, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 3px 6px;
+      border-radius: 4px;
+      color: var(--lime-glow);
+      font-weight: 700;
+    }
+
+    /* Controls Panel */
+    .controls-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    button {
+      flex: 1;
+      padding: 12px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease-in-out;
+      user-select: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: #fff;
+      border-color: #38bdf8;
+      box-shadow: 0 0 12px rgba(2, 132, 199, 0.35);
+    }
+
+    .btn-primary.running {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      border-color: #f87171;
+    }
+
+    .btn-secondary {
+      background: rgba(30, 41, 59, 0.85);
+      color: var(--text-main);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .slider-row input[type="range"] {
+      flex: 1;
+      accent-color: var(--cyan-glow);
+    }
+
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    select {
+      background: #1e293b;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 4px 6px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-family: monospace;
+    }
+
+    /* Log Panel */
+    .log-panel {
+      background: rgba(3, 6, 12, 0.95);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-family: monospace;
+      font-size: 0.68rem;
+      max-height: 80px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 2px;
+      color: #cbd5e1;
+    }
+
+    .log-entry.info { color: #38bdf8; }
+    .log-entry.success { color: var(--lime-glow); }
+    .log-entry.warn { color: var(--amber-glow); }
+    .log-entry.error { color: var(--danger); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <h1>PITCHBLACK</h1>
+      <span class="badge">RADAR</span>
+    </div>
+    <div class="status-indicator">
+      <div id="statusDot" class="status-dot"></div>
+      <span id="statusText">STANDBY</span>
+    </div>
+  </header>
+
+  <!-- Clean Primary HUD -->
+  <div class="hud-grid">
+    <div class="hud-card">
+      <span class="hud-label">Obstacle Range</span>
+      <span id="hudRange" class="hud-val">-- m</span>
+    </div>
+    <div class="hud-card">
+      <span class="hud-label">Direct Peak</span>
+      <span id="hudDirect" class="hud-val">--</span>
+    </div>
+    <div class="hud-card">
+      <span class="hud-label">Echo SNR</span>
+      <span id="hudSNR" class="hud-val">-- %</span>
+    </div>
+  </div>
+
+  <div class="diag-strip">
+    <span>AudioCtx: <b>48000 Hz</b></span>
+    <span class="ok">DSP: <b>Raw (No Filter)</b></span>
+    <span id="stripGate">Gate: <b>0.20m (1.2ms)</b></span>
+  </div>
+
+  <!-- Radar Scope Canvas -->
+  <div class="scope-container">
+    <canvas id="scopeCanvas"></canvas>
+    <div class="scope-overlay">
+      <div id="targetOverlay" class="overlay-badge">TARGET: --</div>
+      <div style="color: var(--text-muted);">0.0m – 3.5m (0–20ms)</div>
+    </div>
+  </div>
+
+  <!-- Controls Panel -->
+  <div class="controls-panel">
+    <div class="btn-row">
+      <button id="btnToggle" class="btn-primary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        <span id="btnToggleText">START RADAR</span>
+      </button>
+      <button id="btnSinglePing" class="btn-secondary">SINGLE PING</button>
+    </div>
+
+    <!-- Interactive Sensitivity Slider -->
+    <div class="slider-row">
+      <span>Detection Threshold:</span>
+      <input type="range" id="sliderThresh" min="1.0" max="6.0" step="0.2" value="2.5" />
+      <span id="threshValLabel" style="font-family: monospace; color: var(--cyan-glow); width: 45px;">2.5%</span>
+    </div>
+
+    <div class="toggle-row">
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <label for="selectGate">Min Range Gate:</label>
+        <select id="selectGate">
+          <option value="0.20" selected>0.20m (Palms + Walls)</option>
+          <option value="0.35">0.35m (Medium)</option>
+          <option value="0.45">0.45m (Stage 1 Strict)</option>
+        </select>
+      </div>
+
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <label for="selectScale">Display:</label>
+        <select id="selectScale">
+          <option value="linear" selected>Linear</option>
+          <option value="db">dB Scale</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div id="logPanel" class="log-panel">
+    <div class="log-entry info">System ready. Tap START RADAR to engage audio.</div>
+  </div>
+
+  <script>
+    /*
+     * PITCHBLACK — Rock-Solid Ultrasonic Radar
+     * Rebuilt cleanly from Stage 1 core:
+     * - Exact 17.5->22kHz linear FM Hann chirp
+     * - Uncompressed 48kHz mic capture
+     * - Realtime FFT Matched Filter
+     * - Direct Path Lock (Amber)
+     * - Clean Secondary Peak Detection (Green) with adjustable gate & threshold
+     */
+
+    const SPEED_OF_SOUND = 343.0; // m/s
+    const CHIRP_F0 = 17500;
+    const CHIRP_F1 = 22000;
+    const CHIRP_DURATION = 0.015; // 15ms
+    const CHIRP_AMP = 0.6; // 0.6 FS
+    const FFT_SIZE = 4096;
+
+    const logPanel = document.getElementById('logPanel');
+    function log(msg, type = 'info') {
+      const el = document.createElement('div');
+      el.className = `log-entry ${type}`;
+      const time = new Date().toLocaleTimeString();
+      el.textContent = `[${time}] ${msg}`;
+      logPanel.prepend(el);
+      if (type === 'error') console.error(msg);
+      else console.log(msg);
+    }
+
+    // Radix-2 FFT
+    class FFT {
+      constructor(size) {
+        this.size = size;
+        this.cosTable = new Float32Array(size / 2);
+        this.sinTable = new Float32Array(size / 2);
+        for (let i = 0; i < size / 2; i++) {
+          const angle = 2 * Math.PI * i / size;
+          this.cosTable[i] = Math.cos(angle);
+          this.sinTable[i] = Math.sin(angle);
+        }
+        this.reverseTable = new Uint32Array(size);
+        let limit = 1;
+        let bit = size >> 1;
+        while (limit < size) {
+          for (let i = 0; i < limit; i++) {
+            this.reverseTable[i + limit] = this.reverseTable[i] + bit;
+          }
+          limit <<= 1;
+          bit >>= 1;
+        }
+      }
+
+      transform(real, imag, inverse = false) {
+        const n = this.size;
+        for (let i = 0; i < n; i++) {
+          const j = this.reverseTable[i];
+          if (j > i) {
+            let temp = real[i]; real[i] = real[j]; real[j] = temp;
+            temp = imag[i]; imag[i] = imag[j]; imag[j] = temp;
+          }
+        }
+        for (let halfSize = 1; halfSize < n; halfSize <<= 1) {
+          const step = n / (halfSize << 1);
+          for (let i = 0; i < n; i += (halfSize << 1)) {
+            for (let j = 0; j < halfSize; j++) {
+              const k = j * step;
+              const c = this.cosTable[k];
+              const s = inverse ? -this.sinTable[k] : this.sinTable[k];
+              const r_odd = real[i + j + halfSize];
+              const i_odd = imag[i + j + halfSize];
+              const tr = r_odd * c + i_odd * s;
+              const ti = i_odd * c - r_odd * s;
+              real[i + j + halfSize] = real[i + j] - tr;
+              imag[i + j + halfSize] = imag[i + j] - ti;
+              real[i + j] += tr;
+              imag[i + j] += ti;
+            }
+          }
+        }
+        if (inverse) {
+          const invN = 1 / n;
+          for (let i = 0; i < n; i++) {
+            real[i] *= invN;
+            imag[i] *= invN;
+          }
+        }
+      }
+    }
+
+    // Audio & State
+    let audioCtx = null;
+    let micStream = null;
+    let micSource = null;
+    let scriptNode = null;
+    let silenceGain = null;
+    let isRunning = false;
+    let pulseTimer = null;
+    let sampleRate = 48000;
+    let chirpAudioBuffer = null;
+    let fft = new FFT(FFT_SIZE);
+
+    let kernelReal = new Float32Array(FFT_SIZE);
+    let kernelImag = new Float32Array(FFT_SIZE);
+
+    const RING_SIZE = 16384;
+    const ringBuffer = new Float32Array(RING_SIZE);
+    let ringHead = 0;
+
+    const rxR = new Float32Array(FFT_SIZE);
+    const rxI = new Float32Array(FFT_SIZE);
+    const zR = new Float32Array(FFT_SIZE);
+    const zI = new Float32Array(FFT_SIZE);
+    const envelope = new Float32Array(FFT_SIZE);
+
+    let lastDirectIdx = -1;
+    let lastEchoIdx = -1;
+    let lastEchoDistM = 0;
+    let lastEchoVal = 0;
+    let lastDirectVal = 0;
+
+    function buildReferenceChirp(fs) {
+      const nChirp = Math.round(CHIRP_DURATION * fs);
+      const chirp = new Float32Array(nChirp);
+      const T = CHIRP_DURATION;
+
+      for (let n = 0; n < nChirp; n++) {
+        const t = n / fs;
+        const w = 0.5 * (1.0 - Math.cos(2.0 * Math.PI * n / (nChirp - 1)));
+        const phase = 2.0 * Math.PI * (CHIRP_F0 * t + 0.5 * (CHIRP_F1 - CHIRP_F0) / T * t * t);
+        chirp[n] = CHIRP_AMP * w * Math.sin(phase);
+      }
+
+      chirpAudioBuffer = audioCtx.createBuffer(1, nChirp, fs);
+      chirpAudioBuffer.getChannelData(0).set(chirp);
+
+      const tempR = new Float32Array(FFT_SIZE);
+      const tempI = new Float32Array(FFT_SIZE);
+      tempR.set(chirp);
+      fft.transform(tempR, tempI, false);
+
+      for (let k = 0; k < FFT_SIZE; k++) {
+        kernelReal[k] = tempR[k];
+        kernelImag[k] = -tempI[k];
+      }
+    }
+
+    function playChirpPulse() {
+      if (!audioCtx || !chirpAudioBuffer) return;
+      try {
+        const source = audioCtx.createBufferSource();
+        source.buffer = chirpAudioBuffer;
+        source.connect(audioCtx.destination);
+        source.start();
+      } catch (err) {}
+    }
+
+    // ==========================================
+    // CLEAN MATCHED FILTER & PEAK FINDER
+    // ==========================================
+    function processMatchedFilter() {
+      // 1. Grab recent RX buffer
+      let readIdx = (ringHead - FFT_SIZE + RING_SIZE) % RING_SIZE;
+      for (let i = 0; i < FFT_SIZE; i++) {
+        rxR[i] = ringBuffer[readIdx];
+        rxI[i] = 0.0;
+        readIdx = (readIdx + 1) % RING_SIZE;
+      }
+
+      // 2. FFT Cross correlation
+      fft.transform(rxR, rxI, false);
+
+      const half = FFT_SIZE / 2;
+      zR[0] = rxR[0] * kernelReal[0] - rxI[0] * kernelImag[0];
+      zI[0] = rxR[0] * kernelImag[0] + rxI[0] * kernelReal[0];
+
+      for (let k = 1; k < half; k++) {
+        zR[k] = 2.0 * (rxR[k] * kernelReal[k] - rxI[k] * kernelImag[k]);
+        zI[k] = 2.0 * (rxR[k] * kernelImag[k] + rxI[k] * kernelReal[k]);
+      }
+      zR[half] = rxR[half] * kernelReal[half] - rxI[half] * kernelImag[half];
+      zI[half] = rxR[half] * kernelImag[half] + rxI[half] * kernelReal[half];
+      for (let k = half + 1; k < FFT_SIZE; k++) {
+        zR[k] = 0.0; zI[k] = 0.0;
+      }
+
+      // 3. IFFT gives analytic envelope
+      fft.transform(zR, zI, true);
+
+      let maxVal = 0.0;
+      let directPeakIdx = -1;
+      for (let n = 0; n < FFT_SIZE; n++) {
+        const mag = Math.sqrt(zR[n] * zR[n] + zI[n] * zI[n]);
+        envelope[n] = mag;
+        if (mag > maxVal) {
+          maxVal = mag;
+          directPeakIdx = n;
+        }
+      }
+
+      lastDirectIdx = directPeakIdx;
+      lastDirectVal = maxVal;
+
+      if (directPeakIdx < 0 || maxVal < 0.005) {
+        lastEchoIdx = -1;
+        updateUI(null, 0);
+        return;
+      }
+
+      document.getElementById('hudDirect').textContent = `${maxVal.toFixed(2)}`;
+
+      // 4. Secondary Peak Detection (Stage 1 Logic with Configurable Gate)
+      const minM = parseFloat(document.getElementById('selectGate').value) || 0.20;
+      const gateSamples = Math.round((minM * 2.0 / SPEED_OF_SOUND) * sampleRate);
+      const maxSearchSamples = Math.round((3.6 * 2.0 / SPEED_OF_SOUND) * sampleRate);
+
+      const threshPct = (parseFloat(document.getElementById('sliderThresh').value) || 2.5) / 100.0;
+      const minPeakHeight = maxVal * threshPct;
+
+      let bestEchoIdx = -1;
+      let bestEchoVal = 0.0;
+
+      for (let offset = gateSamples; offset < maxSearchSamples; offset++) {
+        const idx = directPeakIdx + offset;
+        if (idx >= FFT_SIZE - 2) break;
+
+        const val = envelope[idx];
+        if (val > bestEchoVal && val > minPeakHeight) {
+          // Local 3-point peak
+          if (val >= envelope[idx - 1] && val >= envelope[idx + 1]) {
+            bestEchoVal = val;
+            bestEchoIdx = idx;
+          }
+        }
+      }
+
+      lastEchoIdx = bestEchoIdx;
+      lastEchoVal = bestEchoVal;
+
+      if (bestEchoIdx >= 0) {
+        const deltaSamples = bestEchoIdx - directPeakIdx;
+        const distM = (deltaSamples / sampleRate) * SPEED_OF_SOUND / 2.0;
+        lastEchoDistM = distM;
+        const snrPct = Math.min(100, Math.round((bestEchoVal / maxVal) * 100));
+        updateUI(distM, snrPct);
+      } else {
+        updateUI(null, 0);
+      }
+    }
+
+    function updateUI(distM, snrPct) {
+      const hudRange = document.getElementById('hudRange');
+      const hudSNR = document.getElementById('hudSNR');
+      const targetOverlay = document.getElementById('targetOverlay');
+
+      if (distM !== null) {
+        hudRange.textContent = `${distM.toFixed(2)} m`;
+        hudRange.className = 'hud-val good';
+        hudSNR.textContent = `${snrPct} %`;
+        targetOverlay.textContent = `TARGET: ${distM.toFixed(2)}m (${(distM*100).toFixed(0)}cm)`;
+      } else {
+        hudRange.textContent = '-- m';
+        hudRange.className = 'hud-val';
+        hudSNR.textContent = '-- %';
+        targetOverlay.textContent = `TARGET: searching...`;
+      }
+    }
+
+    // ==========================================
+    // CANVAS VISUALIZATION (EXACT STAGE 1 SCOPE)
+    // ==========================================
+    const canvas = document.getElementById('scopeCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.resetTransform();
+      ctx.scale(dpr, dpr);
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function renderScope() {
+      requestAnimationFrame(renderScope);
+      const rect = canvas.getBoundingClientRect();
+      const W = rect.width;
+      const H = rect.height;
+
+      ctx.fillStyle = '#03060c';
+      ctx.fillRect(0, 0, W, H);
+
+      const startIdx = lastDirectIdx >= 0 ? Math.max(0, lastDirectIdx - 30) : 0;
+      const displayLength = Math.min(FFT_SIZE - startIdx, Math.round((3.6 * 2 / SPEED_OF_SOUND) * sampleRate) + 40);
+
+      // Distance grid lines
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.12)';
+      ctx.lineWidth = 1;
+      ctx.font = '10px monospace';
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
+
+      const samplesPerMeter = (2.0 / SPEED_OF_SOUND) * sampleRate;
+      for (let m = 0.5; m <= 3.5; m += 0.5) {
+        const offset = (lastDirectIdx >= 0 ? lastDirectIdx : 30) + m * samplesPerMeter - startIdx;
+        const x = (offset / displayLength) * W;
+        if (x >= 0 && x <= W) {
+          ctx.beginPath();
+          ctx.setLineDash([3, 4]);
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, H);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillText(`${m.toFixed(1)}m`, x + 3, H - 6);
+        }
+      }
+
+      // Direct-path gate exclusion
+      if (lastDirectIdx >= 0) {
+        const minM = parseFloat(document.getElementById('selectGate').value) || 0.20;
+        const gateSamples = Math.round((minM * 2.0 / SPEED_OF_SOUND) * sampleRate);
+        const gLeft = ((lastDirectIdx - startIdx) / displayLength) * W;
+        const gRight = ((lastDirectIdx + gateSamples - startIdx) / displayLength) * W;
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.12)';
+        ctx.fillRect(gLeft, 0, gRight - gLeft, H);
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.6)';
+        ctx.fillText(`GATE (${minM}m)`, gLeft + 2, 18);
+      }
+
+      // Peak for normalization
+      let localMax = 1e-5;
+      for (let i = 0; i < displayLength; i++) {
+        const val = envelope[startIdx + i] || 0;
+        if (val > localMax) localMax = val;
+      }
+
+      const isDb = document.getElementById('selectScale').value === 'db';
+
+      // Draw Threshold Line (Faint Amber Dashed Line)
+      const threshPct = (parseFloat(document.getElementById('sliderThresh').value) || 2.5) / 100.0;
+      const threshAbs = lastDirectVal * threshPct;
+      let threshYNorm = isDb ? Math.max(0, (20 * Math.log10(Math.max(1e-5, threshAbs / localMax)) + 50) / 50)
+                             : Math.min(1.0, threshAbs / localMax);
+      const threshY = H - (threshYNorm * (H - 26) + 13);
+      ctx.strokeStyle = 'rgba(255, 183, 3, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(0, threshY);
+      ctx.lineTo(W, threshY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Draw Envelope Waveform (Cyan)
+      ctx.beginPath();
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 1.8;
+      for (let i = 0; i < displayLength; i++) {
+        const val = envelope[startIdx + i] || 0;
+        const x = (i / (displayLength - 1)) * W;
+        let yNorm = isDb ? Math.max(0, (20 * Math.log10(Math.max(1e-5, val / localMax)) + 50) / 50)
+                         : Math.min(1.0, val / localMax);
+        const y = H - (yNorm * (H - 26) + 13);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Highlight Direct Path Peak (Amber)
+      if (lastDirectIdx >= startIdx && lastDirectIdx < startIdx + displayLength) {
+        const directX = ((lastDirectIdx - startIdx) / (displayLength - 1)) * W;
+        ctx.fillStyle = '#ffaa00';
+        ctx.beginPath();
+        ctx.arc(directX, 22, 5, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillText('DIRECT', directX - 18, 36);
+      }
+
+      // Highlight Secondary Peak (Green Strobe) — Exactly like Stage 1!
+      if (lastEchoIdx >= startIdx && lastEchoIdx < startIdx + displayLength) {
+        const echoX = ((lastEchoIdx - startIdx) / (displayLength - 1)) * W;
+        ctx.fillStyle = '#39ff14';
+        ctx.beginPath();
+        ctx.arc(echoX, 22, 6, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.strokeStyle = '#39ff14';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(echoX, 28);
+        ctx.lineTo(echoX, H - 18);
+        ctx.stroke();
+
+        ctx.fillText(`${lastEchoDistM.toFixed(2)}m`, Math.max(10, echoX - 16), 40);
+      }
+    }
+    renderScope();
+
+    // ==========================================
+    // AUDIO ENGINE START / STOP
+    // ==========================================
+    async function startRadar() {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("navigator.mediaDevices disabled on plain HTTP. Please open https://" + window.location.hostname + ":8443 instead.");
+        }
+
+        log("Opening 48 kHz AudioContext...", 'info');
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContextClass({ sampleRate: 48000 });
+        sampleRate = audioCtx.sampleRate;
+
+        buildReferenceChirp(sampleRate);
+
+        const audioConstraints = {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          sampleRate: 48000,
+          channelCount: 1
+        };
+
+        log("Requesting raw mic stream...", 'info');
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+          video: false
+        });
+
+        const track = micStream.getAudioTracks()[0];
+        const settings = track.getSettings();
+        log(`Mic active: echoCancel=${settings.echoCancellation}, noiseSupp=${settings.noiseSuppression}, agc=${settings.autoGainControl}`, 'success');
+
+        micSource = audioCtx.createMediaStreamSource(micStream);
+        scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
+        silenceGain = audioCtx.createGain();
+        silenceGain.gain.value = 0.0;
+
+        scriptNode.onaudioprocess = (e) => {
+          const input = e.inputBuffer.getChannelData(0);
+          const len = input.length;
+          for (let i = 0; i < len; i++) {
+            ringBuffer[ringHead] = input[i];
+            ringHead = (ringHead + 1) % RING_SIZE;
+          }
+        };
+
+        micSource.connect(scriptNode);
+        scriptNode.connect(silenceGain);
+        silenceGain.connect(audioCtx.destination);
+
+        // 20 Hz Radar Loop
+        pulseTimer = setInterval(() => {
+          playChirpPulse();
+          setTimeout(() => {
+            processMatchedFilter();
+          }, 25);
+        }, 50);
+
+        isRunning = true;
+        updateUIState();
+        log("Radar RUNNING (20 Hz). Green peak active.", 'success');
+
+      } catch (err) {
+        log(`Launch Failed: ${err.message}`, 'error');
+        stopRadar();
+      }
+    }
+
+    function stopRadar() {
+      if (pulseTimer) { clearInterval(pulseTimer); pulseTimer = null; }
+      if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+      if (scriptNode) { scriptNode.disconnect(); scriptNode = null; }
+      if (micSource) { micSource.disconnect(); micSource = null; }
+      if (silenceGain) { silenceGain.disconnect(); silenceGain = null; }
+      if (audioCtx && audioCtx.state !== 'closed') { audioCtx.close(); audioCtx = null; }
+      isRunning = false;
+      updateUIState();
+      log("Radar stopped.", 'warn');
+    }
+
+    function updateUIState() {
+      const btn = document.getElementById('btnToggle');
+      const btnText = document.getElementById('btnToggleText');
+      const statusDot = document.getElementById('statusDot');
+      const statusText = document.getElementById('statusText');
+
+      if (isRunning) {
+        btn.classList.add('running');
+        btnText.textContent = 'STOP RADAR';
+        statusDot.classList.add('active');
+        statusText.textContent = 'ACTIVE (20Hz)';
+        statusText.style.color = 'var(--lime-glow)';
+      } else {
+        btn.classList.remove('running');
+        btnText.textContent = 'START RADAR';
+        statusDot.classList.remove('active');
+        statusText.textContent = 'STANDBY';
+        statusText.style.color = 'var(--text-muted)';
+      }
+    }
+
+    // UI Event Listeners
+    document.getElementById('btnToggle').addEventListener('click', () => {
+      if (isRunning) stopRadar();
+      else startRadar();
+    });
+
+    document.getElementById('btnSinglePing').addEventListener('click', async () => {
+      if (!isRunning) {
+        await startRadar();
+        setTimeout(() => {
+          if (pulseTimer) clearInterval(pulseTimer);
+          playChirpPulse();
+          setTimeout(() => processMatchedFilter(), 35);
+        }, 150);
+      } else {
+        playChirpPulse();
+        setTimeout(() => processMatchedFilter(), 35);
+      }
+      log("Single ping emitted.", 'info');
+    });
+
+    const slider = document.getElementById('sliderThresh');
+    const label = document.getElementById('threshValLabel');
+    slider.addEventListener('input', () => {
+      label.textContent = `${slider.value}%`;
+    });
+
+    document.getElementById('selectGate').addEventListener('change', (e) => {
+      document.getElementById('stripGate').innerHTML = `Gate: <b>${e.target.value}m</b>`;
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#04070c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" type="image/svg+xml" href="../assets/icon.svg">
+<title>SentryShield — Sensor</title>
+<link rel="stylesheet" href="../assets/base.css">
+<link rel="stylesheet" href="phone.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <h1>SENTRYSHIELD</h1>
+  </div>
+  <div class="bar-right">
+    <span class="chip" id="modeChip">SIM</span>
+    <span class="conn" id="connChip"><i class="dot"></i><span id="connText">OFFLINE</span></span>
+  </div>
+</header>
+
+<div class="statusline">
+  <span id="scanState">ACOUSTIC SCANNING — STANDBY</span>
+  <span class="sep">/</span>
+  <span id="latencyText">-- ms</span>
+</div>
+
+<!-- Primary readouts: legible at arm's length, in the dark, while moving -->
+<section class="readout">
+  <div class="ro ro-main">
+    <div class="ro-label">NEAREST OBSTACLE</div>
+    <div class="ro-value" id="rangeValue">--<span class="unit">m</span></div>
+    <div class="ro-sub" id="rangeSub">no returns</div>
+  </div>
+  <div class="ro-col">
+    <div class="ro">
+      <div class="ro-label">HEADING</div>
+      <div class="ro-value small" id="headingValue">--<span class="unit">&deg;</span></div>
+      <div class="ro-sub" id="headingSub">no sensor</div>
+    </div>
+    <div class="ro">
+      <div class="ro-label">CLASSIFICATION</div>
+      <div class="ro-value small" id="classValue">--</div>
+      <div class="ro-sub" id="classSub">EchoNet idle</div>
+    </div>
+  </div>
+</section>
+
+<!-- Confidence is never implied; it is always drawn -->
+<section class="confbar" id="confSection">
+  <div class="confbar-head">
+    <span>CONFIDENCE</span>
+    <span id="confText">--</span>
+  </div>
+  <div class="meter"><div class="meter-fill" id="confFill"></div></div>
+  <div class="probs" id="probRows"></div>
+</section>
+
+<!-- Sonar: sweep follows real orientation when available -->
+<section class="scope">
+  <canvas id="sonar"></canvas>
+  <div class="scope-tags">
+    <span id="sweepTag">SWEEP: BORESIGHT</span>
+    <span id="rangeRingTag">4 m</span>
+  </div>
+</section>
+
+<section class="controls">
+  <button class="btn btn-primary" id="btnScan">
+    <span id="btnScanText">START SCAN</span>
+  </button>
+  <div class="btn-row">
+    <button class="btn" id="btnMission">START MISSION</button>
+    <button class="btn" id="btnCalibrate">CALIBRATE</button>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-sm" id="btnAudio">AUDIO ON</button>
+    <button class="btn btn-sm" id="btnVoice">VOICE ON</button>
+    <button class="btn btn-sm" id="btnMode">MODE: SIM</button>
+  </div>
+</section>
+
+<!-- Manual pose control, used when the phone has no usable motion sensors -->
+<section class="panel" id="posePanel">
+  <div class="panel-head">
+    <span>POSE — <b id="poseMethod">STATIC</b></span>
+    <span id="poseConf">--</span>
+  </div>
+  <div class="pose-grid">
+    <button class="btn btn-sm" id="btnTurnL">&#8630; 15&deg;</button>
+    <button class="btn btn-sm" id="btnWalk">STEP 0.7 m</button>
+    <button class="btn btn-sm" id="btnTurnR">15&deg; &#8631;</button>
+  </div>
+  <div class="panel-note" id="poseNote">Position is estimated, not surveyed.</div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><span>GUIDANCE</span><span id="voiceLabel">LOCAL FALLBACK</span></div>
+  <div class="cue" id="cueText">Standing by.</div>
+</section>
+
+<section class="panel collapsed" id="logPanel">
+  <div class="panel-head" id="logToggle"><span>SENSOR LOG</span><span id="logCount">0</span></div>
+  <div class="log" id="log"></div>
+</section>
+
+<footer class="foot">
+  <a href="../diagnostics/">DIAGNOSTICS</a>
+  <span>research prototype — not a navigation aid</span>
+</footer>
+
+<!-- Calibration flow -->
+<div class="sheet" id="calSheet" hidden>
+  <div class="sheet-inner">
+    <h2>CALIBRATE RANGE</h2>
+    <ol class="steps">
+      <li>Stand facing a flat wall with nothing else in front of you.</li>
+      <li>Hold the phone upright, speaker toward the wall.</li>
+      <li>Enter the real distance, then hold still while samples collect.</li>
+    </ol>
+    <div class="dist-row">
+      <label for="calDist">KNOWN DISTANCE</label>
+      <div class="dist-choices" id="calChoices">
+        <button data-d="0.5">0.5 m</button>
+        <button data-d="1" class="on">1.0 m</button>
+        <button data-d="1.5">1.5 m</button>
+        <button data-d="2">2.0 m</button>
+      </div>
+      <input type="number" id="calDist" step="0.05" min="0.2" max="5" value="1.0" inputmode="decimal">
+    </div>
+    <div class="meter cal-meter"><div class="meter-fill" id="calFill"></div></div>
+    <div class="cal-status" id="calStatus">Ready. The scan must be running.</div>
+    <div class="sheet-btns">
+      <button class="btn" id="calCancel">CLOSE</button>
+      <button class="btn btn-primary" id="calStart">COLLECT SAMPLES</button>
+    </div>
+    <p class="fineprint">Calibration removes fixed latency and speed-of-sound error. It does not fix beam-width ambiguity, which surface the echo came from, or classifier accuracy.</p>
+  </div>
+</div>
+
+<!-- First-run gate: audio and sensors both need a user gesture -->
+<div class="sheet" id="gateSheet">
+  <div class="sheet-inner">
+    <div class="gate-mark" aria-hidden="true"></div>
+    <h2>SENTRYSHIELD SENSOR</h2>
+    <p class="gate-copy">This phone becomes the acoustic sensor: the speaker emits 17.5&ndash;22&nbsp;kHz chirps and the microphone listens for echoes. Everything is processed on the device.</p>
+    <div class="gate-caps" id="gateCaps"></div>
+    <button class="btn btn-primary btn-lg" id="gateGo">ENABLE SENSORS</button>
+    <button class="btn" id="gateSkip">CONTINUE WITHOUT AUDIO</button>
+    <p class="fineprint">Chirps are near-ultrasonic and quiet, but audible to some people and to pets. Research prototype &mdash; not a certified navigation or safety device.</p>
+  </div>
+</div>
+
+<script src="../vendor/echonet_weights.js"></script>
+<script type="module" src="phone.mjs"></script>
+</body>
+</html>

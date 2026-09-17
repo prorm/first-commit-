@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#04070c">
+<link rel="icon" type="image/svg+xml" href="assets/icon.svg">
+<title>SentryShield</title>
+<link rel="stylesheet" href="assets/base.css">
+<style>
+  body {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: max(34px, env(safe-area-inset-top, 0px)) 20px max(30px, env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+  .hero { display: flex; flex-direction: column; gap: 12px; position: relative; z-index: 1; }
+  .hero-top { display: flex; align-items: center; gap: 11px; }
+  .hero h1 { font-size: 17px; color: var(--live); }
+  .tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--text-3);
+    text-transform: uppercase;
+  }
+  .lede { font-size: 14px; line-height: 1.7; color: var(--text-2); max-width: 62ch; }
+
+  /* The signal chain, as a single readable line of the actual pipeline */
+  .chain {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    color: var(--text-3);
+    text-transform: uppercase;
+    padding: 13px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    position: relative;
+    z-index: 1;
+  }
+  .chain b { color: var(--live); font-weight: 500; }
+  .chain i { color: var(--line-2); font-style: normal; }
+
+  .routes { display: grid; grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); gap: 10px; position: relative; z-index: 1; }
+  .route {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    border-radius: var(--r);
+    padding: 15px 15px 16px;
+    text-decoration: none;
+    transition: border-color 0.16s, background 0.16s, transform 0.1s;
+  }
+  .route:hover { border-color: rgba(44, 232, 245, 0.45); background: var(--panel-2); text-decoration: none; }
+  .route:active { transform: translateY(1px); }
+  .route .n { font-family: var(--mono); font-size: 12px; letter-spacing: 0.17em; color: var(--live); text-transform: uppercase; }
+  .route .d { font-size: 12px; color: var(--text-2); line-height: 1.55; }
+  .route .p { font-family: var(--mono); font-size: 9.5px; color: var(--text-3); letter-spacing: 0.08em; }
+  .route.primary { border-color: rgba(44, 232, 245, 0.38); background: linear-gradient(180deg, rgba(44, 232, 245, 0.07), rgba(10, 16, 26, 0.72)); }
+
+  .note {
+    border-left: 2px solid var(--line-2);
+    padding: 2px 0 2px 13px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-3);
+    position: relative;
+    z-index: 1;
+  }
+  .note b { color: var(--text-2); font-weight: 600; }
+  .docs { display: flex; flex-wrap: wrap; gap: 16px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; position: relative; z-index: 1; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-top">
+    <span class="mark" aria-hidden="true"></span>
+    <h1>SENTRYSHIELD</h1>
+    <span class="tag">acoustic perception prototype</span>
+  </div>
+  <p class="lede">
+    A phone emits near-ultrasonic chirps and listens for the echoes. On-device DSP
+    turns each echo into a range, a tiny neural network guesses what the surface is,
+    and a laptop fuses the stream into a live map of the space — built from sound
+    rather than light.
+  </p>
+</div>
+
+<div class="chain">
+  <b>speaker</b><i>→</i>17.5–22 kHz chirp<i>→</i>environment<i>→</i><b>microphone</b><i>→</i>matched filter<i>→</i>CFAR<i>→</i>range<i>→</i><b>EchoNet</b><i>→</i>temporal fusion<i>→</i>spatial fusion<i>→</i><b>environment map</b>
+</div>
+
+<div class="routes">
+  <a class="route primary" href="/map">
+    <span class="n">Command Center</span>
+    <span class="d">The hero screen. Live point cloud, occupancy grid, reconstructed surfaces, phone trajectory and the AI classifier panel. Open this on the laptop.</span>
+    <span class="p">/map</span>
+  </a>
+  <a class="route" href="/phone">
+    <span class="n">Phone Sensor</span>
+    <span class="d">The sensor itself: chirp transmit, echo capture, on-device DSP, sonar display and audio guidance. Open this on the phone.</span>
+    <span class="p">/phone</span>
+  </a>
+  <a class="route" href="/diagnostics">
+    <span class="n">Diagnostics</span>
+    <span class="d">What this browser will actually grant, per-subsystem tests, and in-browser self-tests of the DSP, geometry and protocol layers.</span>
+    <span class="p">/diagnostics</span>
+  </a>
+  <a class="route" href="/legacy/gate-test">
+    <span class="n">Gate Test</span>
+    <span class="d">The original single-page prototype kept intact: raw matched-filter scope with a manual range gate. Useful for checking a room's acoustics.</span>
+    <span class="p">/legacy/gate-test</span>
+  </a>
+</div>
+
+<p class="note">
+  <b>No phone? No microphone? No AWS?</b> The command center runs a deterministic
+  digital twin that raycasts a virtual building and synthesises physically-modelled
+  echoes, which the real classifier then labels. It emits the identical detection
+  schema, so the map cannot tell the difference — and neither the demo nor the map
+  needs credentials, hardware or a network to work.
+</p>
+
+<p class="note">
+  <b>Research prototype.</b> Ranges are estimated from a single-element sensor with a
+  wide beam; bearing is the phone's boresight, not a resolved angle; position is
+  dead-reckoned, not surveyed; and the echo classifier scores 69.5&nbsp;% on synthetic
+  validation (WALL 91&nbsp;%, SOFT 74&nbsp;%, OPENING 43&nbsp;%). Not a navigation or
+  safety device, and no smoke-penetration or collision-avoidance claims are made.
+</p>
+
+<div class="docs">
+  <a href="/docs/DEMO.md">DEMO.md</a>
+  <a href="/docs/ARCHITECTURE.md">ARCHITECTURE.md</a>
+  <a href="/docs/STATUS.md">STATUS.md</a>
+  <a href="/docs/PROTOCOL.md">PROTOCOL.md</a>
+  <a href="/api/status">/api/status</a>
+</div>
+
+</body>
+</html>
