@@ -22,12 +22,12 @@
 import { CLASSES } from '../shared/protocol.mjs';
 
 const CLASS_RGB = {
-  WALL: [78, 168, 255],
+  WALL: [44, 232, 245],
   SOFT: [255, 180, 84],
   OPENING: [155, 140, 255],
 };
 const LIVE_RGB = [44, 232, 245];
-const INFER_RGB = [179, 157, 255];
+const INFER_RGB = [44, 232, 245];
 
 /**
  * Live boundary bars get their own palette, hotter than CLASS_RGB, because
@@ -312,48 +312,77 @@ export class MapRenderer {
   drawReconstruction(c, recon, now) {
     const t = this.reconAnim;
     if (!recon || !recon.segments) return;
-    // Surfaces are drawn clearly; the RECONSTRUCT action brings them to full glow.
-    const base = 0.52 + 0.48 * t;
+    // Surfaces are drawn clearly in tactical neon cyan
+    const base = 0.78 + 0.22 * t;
 
+    c.save();
     for (const s of recon.segments) {
       const a = this.toScreen(s.a.x, s.a.y);
       const b = this.toScreen(s.b.x, s.b.y);
-      // Line weight and opacity both track the fit's own confidence, so a
-      // thin faint wall visibly means "weak evidence".
-      const conf = s.confidence || 0;
-      const alpha = base * (0.3 + 0.7 * conf);
-      const rgb = s.className && CLASS_RGB[s.className] ? CLASS_RGB[s.className] : INFER_RGB;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1) continue;
 
-      if (t > 0.05) {
-        c.save();
-        c.shadowBlur = 16 * t * (0.4 + 0.6 * conf);
-        c.shadowColor = 'rgba(' + rgb.join(',') + ',' + (0.55 * t).toFixed(3) + ')';
-        c.strokeStyle = 'rgba(' + rgb.join(',') + ',' + alpha.toFixed(3) + ')';
-        c.lineWidth = 1.2 + 2.4 * conf * t;
-        c.lineCap = 'round';
+      const conf = Math.max(0.3, s.confidence || 0.5);
+      const isWall = s.className === 'WALL' || !s.className;
+      const rgb = isWall ? [44, 232, 245] : (CLASS_RGB[s.className] || [44, 232, 245]);
+      const alpha = Math.min(1, base * (0.65 + 0.35 * conf));
+
+      // Glow pass
+      c.shadowBlur = 6 + 10 * conf;
+      c.shadowColor = 'rgba(' + rgb.join(',') + ',' + (0.55 * alpha).toFixed(3) + ')';
+      c.strokeStyle = 'rgba(' + rgb.join(',') + ',' + (0.45 * alpha).toFixed(3) + ')';
+      c.lineWidth = 3.2 + 2.0 * conf;
+      c.lineCap = 'butt';
+      c.beginPath();
+      c.moveTo(a.x, a.y);
+      c.lineTo(b.x, b.y);
+      c.stroke();
+
+      // Sharp architectural core line
+      c.shadowBlur = 0;
+      const core = rgb.map((v) => Math.min(255, Math.round(v + (255 - v) * 0.35)));
+      c.strokeStyle = 'rgba(' + core.join(',') + ',' + alpha.toFixed(3) + ')';
+      c.lineWidth = 1.8 + 0.8 * conf;
+      c.beginPath();
+      c.moveTo(a.x, a.y);
+      c.lineTo(b.x, b.y);
+      c.stroke();
+
+      // Blueprint end brackets for clean architectural wall definition
+      if (len > 12) {
+        const ux = dx / len;
+        const uy = dy / len;
+        const tick = Math.min(6, 3 + 2 * conf);
+        c.lineWidth = 1.2;
+        c.strokeStyle = 'rgba(' + rgb.join(',') + ',' + (alpha * 0.85).toFixed(3) + ')';
         c.beginPath();
-        c.moveTo(a.x, a.y);
-        c.lineTo(b.x, b.y);
+        c.moveTo(a.x + uy * tick, a.y - ux * tick);
+        c.lineTo(a.x - uy * tick, a.y + ux * tick);
+        c.moveTo(b.x + uy * tick, b.y - ux * tick);
+        c.lineTo(b.x - uy * tick, b.y + ux * tick);
         c.stroke();
-        c.restore();
-      } else {
-        c.strokeStyle = 'rgba(' + rgb.join(',') + ',' + alpha.toFixed(3) + ')';
-        c.lineWidth = 1;
-        c.beginPath();
-        c.moveTo(a.x, a.y);
-        c.lineTo(b.x, b.y);
-        c.stroke();
+
+        // Wall length plate for surveyed walls
+        if (s.length >= 1.2 && this.scale > 28 && (t > 0.3 || this.scale > 40)) {
+          const midX = (a.x + b.x) / 2;
+          const midY = (a.y + b.y) / 2;
+          c.font = '9px ui-monospace, monospace';
+          plateText(c, 'WALL ' + s.length.toFixed(1) + ' m', midX + uy * 8, midY - ux * 8, rgb, 0.85);
+        }
       }
     }
+    c.restore();
 
-    // Corners: a small bracket, drawn only once the morph is underway.
-    if (t > 0.35) {
-      const ca = (t - 0.35) / 0.65;
+    // Corners: a small bracket, drawn once morph starts
+    if (t > 0.2) {
+      const ca = Math.min(1, (t - 0.2) / 0.8);
       for (const k of recon.corners || []) {
         const p = this.toScreen(k.x, k.y);
-        const r = 7;
-        c.strokeStyle = 'rgba(' + INFER_RGB.join(',') + ',' + (0.7 * ca * (k.confidence || 0.5)).toFixed(3) + ')';
-        c.lineWidth = 1;
+        const r = 8;
+        c.strokeStyle = 'rgba(' + LIVE_RGB.join(',') + ',' + (0.85 * ca * (k.confidence || 0.5)).toFixed(3) + ')';
+        c.lineWidth = 1.5;
         c.beginPath();
         c.moveTo(p.x - r, p.y);
         c.lineTo(p.x, p.y);
@@ -362,37 +391,35 @@ export class MapRenderer {
       }
     }
 
-    // Openings: the demo's payoff, so they are labelled with their evidence
-    // and confidence rather than just marked.
+    // Openings: labeled with evidence and confidence
     for (const o of recon.openings || []) {
       if ((o.confidence || 0) < 0.45) continue;
       const p = this.toScreen(o.x, o.y);
       const pulse = 0.55 + 0.45 * Math.sin(now / 420);
-      const alpha = (0.25 + 0.75 * o.confidence) * (0.35 + 0.65 * t);
+      const alpha = (0.35 + 0.65 * o.confidence) * (0.5 + 0.5 * t);
       c.save();
       c.strokeStyle = 'rgba(' + CLASS_RGB.OPENING.join(',') + ',' + (alpha * pulse).toFixed(3) + ')';
-      c.lineWidth = 1.4;
+      c.lineWidth = 1.6;
       c.setLineDash([3, 3]);
       c.beginPath();
-      c.arc(p.x, p.y, 11, 0, Math.PI * 2);
+      c.arc(p.x, p.y, 12, 0, Math.PI * 2);
       c.stroke();
       c.restore();
 
-      if (t > 0.5 && this.scale > 26) {
+      if (this.scale > 26) {
         c.font = '9px ui-monospace, monospace';
         const tag = (o.width ? o.width.toFixed(2) + ' m ' : '') + Math.round(o.confidence * 100) + '%';
-        // "OPENING?" with the question mark, always: this is a candidate.
-        plateText(c, 'OPENING? ' + tag, p.x + 15, p.y - 3, CLASS_RGB.OPENING, 0.92 * t);
-        plateText(c, o.evidence, p.x + 15, p.y + 9, [130, 145, 170], 0.75 * t);
+        plateText(c, 'OPENING ' + tag, p.x + 15, p.y - 3, CLASS_RGB.OPENING, 0.92);
+        plateText(c, o.evidence, p.x + 15, p.y + 9, [130, 145, 170], 0.75);
       }
     }
 
-    // Corridors: a centreline hint, nothing more.
-    if (t > 0.6) {
+    // Corridors: a centreline hint
+    if (t > 0.4) {
       for (const cr of recon.corridors || []) {
         const p = this.toScreen(cr.mid.x, cr.mid.y);
         c.font = '9px ui-monospace, monospace';
-        plateText(c, 'CORRIDOR ' + cr.width.toFixed(1) + ' m', p.x + 8, p.y, INFER_RGB, 0.7);
+        plateText(c, 'CORRIDOR ' + cr.width.toFixed(1) + ' m', p.x + 8, p.y, LIVE_RGB, 0.8);
       }
     }
   }
@@ -541,28 +568,81 @@ export class MapRenderer {
     }
   }
 
-  /** Phone path: recent nodes brighter, and pose confidence shown as width. */
+  /** Phone path: tactical glowing route with origin beacon and waypoint nodes. */
   drawTrajectory(c, traj, now) {
     const nodes = traj.nodes || [];
     if (nodes.length < 2) return;
 
+    c.save();
     c.lineCap = 'round';
     c.lineJoin = 'round';
+
+    // Pass 1: Wide soft neon glow halo
+    c.shadowBlur = 10;
+    c.shadowColor = 'rgba(44,232,245,0.45)';
     for (let i = 1; i < nodes.length; i++) {
-      if (nodes[i].jump) continue; // Don't draw line across teleports/re-zeros
+      if (nodes[i].jump) continue;
       const a = this.toScreen(nodes[i - 1].x, nodes[i - 1].y);
       const b = this.toScreen(nodes[i].x, nodes[i].y);
-      const recency = i / nodes.length;
-      const conf = nodes[i].c != null ? nodes[i].c : 0.5;
-      c.strokeStyle = 'rgba(' + LIVE_RGB.join(',') + ',' + (0.1 + 0.42 * recency).toFixed(3) + ')';
-      // A low-confidence (badly dead-reckoned) stretch of path is drawn
-      // thinner, so drift is visible rather than hidden.
-      c.lineWidth = 0.7 + 1.9 * conf;
+      const recency = 0.45 + 0.55 * (i / nodes.length);
+      c.strokeStyle = 'rgba(44,232,245,' + (0.32 * recency).toFixed(3) + ')';
+      c.lineWidth = 5.5;
       c.beginPath();
       c.moveTo(a.x, a.y);
       c.lineTo(b.x, b.y);
       c.stroke();
     }
+
+    // Pass 2: Sharp core tactical path line
+    c.shadowBlur = 0;
+    for (let i = 1; i < nodes.length; i++) {
+      if (nodes[i].jump) continue;
+      const a = this.toScreen(nodes[i - 1].x, nodes[i - 1].y);
+      const b = this.toScreen(nodes[i].x, nodes[i].y);
+      const recency = 0.55 + 0.45 * (i / nodes.length);
+      const conf = nodes[i].c != null ? nodes[i].c : 0.6;
+      c.strokeStyle = 'rgba(214,248,255,' + (0.85 * recency).toFixed(3) + ')';
+      c.lineWidth = 1.4 + 1.2 * conf;
+      c.beginPath();
+      c.moveTo(a.x, a.y);
+      c.lineTo(b.x, b.y);
+      c.stroke();
+    }
+
+    // Pass 3: Periodic tactical breadcrumb waypoints
+    const step = Math.max(1, Math.floor(nodes.length / 25));
+    for (let i = 0; i < nodes.length; i += step) {
+      if (nodes[i].jump) continue;
+      const p = this.toScreen(nodes[i].x, nodes[i].y);
+      const recency = 0.35 + 0.65 * (i / nodes.length);
+      c.beginPath();
+      c.arc(p.x, p.y, 2, 0, Math.PI * 2);
+      c.fillStyle = 'rgba(44,232,245,' + (0.75 * recency).toFixed(3) + ')';
+      c.fill();
+    }
+
+    // Pass 4: Tactical START marker at trajectory origin
+    if (nodes.length > 0 && !nodes[0].jump) {
+      const p0 = this.toScreen(nodes[0].x, nodes[0].y);
+      const pulse = 0.65 + 0.35 * Math.sin(now / 380);
+      c.beginPath();
+      c.arc(p0.x, p0.y, 6.5, 0, Math.PI * 2);
+      c.strokeStyle = 'rgba(44,232,245,' + (0.8 * pulse).toFixed(3) + ')';
+      c.lineWidth = 1.5;
+      c.stroke();
+
+      c.beginPath();
+      c.arc(p0.x, p0.y, 2.5, 0, Math.PI * 2);
+      c.fillStyle = 'rgba(44,232,245,0.9)';
+      c.fill();
+
+      if (this.scale > 25) {
+        c.font = '8px ui-monospace, monospace';
+        plateText(c, 'START', p0.x + 8, p0.y - 4, LIVE_RGB, 0.85);
+      }
+    }
+
+    c.restore();
   }
 
   /** Expanding rings: one per real detection, travelling out to its range. */

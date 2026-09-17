@@ -205,7 +205,10 @@ class Hub {
         this.map.startMission();
         this.guidance.reset();
         this.lastDetectionAt = Date.now();
-        if (msg.scenario) this.sim.setScenario(msg.scenario, msg.seed);
+        if (msg.scenario) {
+          this.sim.setScenario(msg.scenario, msg.seed);
+          if (this.mode === 'live') this.setMode('simulation');
+        }
         if (this.mode !== 'live') this.sim.start(msg.rateHz || 20);
         this.scanning = true;
         if (msg.record !== false) this.startRecording();

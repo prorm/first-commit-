@@ -58,7 +58,8 @@ export function reconstruct(points, opts = {}) {
   const segments = [];
   for (const cl of clusters) fitRecursive(cl, cfg, segments, 0);
 
-  const kept = segments.filter((s) => s.length >= cfg.minSegmentLength);
+  const rawKept = segments.filter((s) => s.length >= cfg.minSegmentLength);
+  const kept = alignAndMergeSurfaces(rawKept, cfg);
   kept.sort((a, b) => b.length - a.length);
   kept.forEach((s, i) => { s.id = i + 1; });
 
@@ -280,7 +281,12 @@ function toSegment(fit, cfg) {
     hits += p.hits || 1;
     if (p.className) cls[p.className] = (cls[p.className] || 0) + w;
   }
-  const dominant = Object.keys(cls).sort((a, b) => cls[b] - cls[a])[0] || null;
+  let dominant = Object.keys(cls).sort((a, b) => cls[b] - cls[a])[0] || 'WALL';
+  // Structural surfaces are walls: prioritize WALL for architecture.
+  // SOFT is strictly reserved for small isolated clusters (furniture/person).
+  if (dominant !== 'SOFT' || fit.length >= 0.5 || fit.points.length >= 6) {
+    dominant = 'WALL';
+  }
   // Straightness dominates: a tight fit over many looks is a boundary we can
   // stand behind; a loose fit over three points is a guess, and reads as one.
   const straightness = Math.max(0, 1 - fit.rms / (cfg.splitResidual * 2));
@@ -306,6 +312,116 @@ function toSegment(fit, cfg) {
     // Along-axis coordinates of the member points; the gap scan reuses these.
     ts: fit.points.map((p) => round3((p.x - fit.cx) * fit.ux + (p.y - fit.cy) * fit.uy)).sort((x, y) => x - y),
   };
+}
+
+/**
+ * Manhattan Map Matching & Collinear Wall Merging:
+ * 1. Find dominant orthogonal orientation of the room/building
+ * 2. Snap segments within tolerance to the dominant orthogonal axes
+ * 3. Merge collinear fragments along the same wall into continuous boundaries
+ */
+export function alignAndMergeSurfaces(segments, cfg = DEF) {
+  if (!segments || segments.length <= 1) return segments || [];
+
+  // 1. Dominant building orientation from major segments
+  let sumSin = 0, sumCos = 0, totalW = 0;
+  for (const s of segments) {
+    if (s.length < 0.4) continue;
+    const w = s.length * (s.support || 1);
+    const a = ((s.angleDeg % 90) + 90) % 90;
+    const rad4 = (a * 4 * Math.PI) / 180;
+    sumSin += Math.sin(rad4) * w;
+    sumCos += Math.cos(rad4) * w;
+    totalW += w;
+  }
+
+  let domAngle = 0;
+  if (totalW > 0) {
+    const avgRad4 = Math.atan2(sumSin, sumCos);
+    domAngle = (((avgRad4 / 4) * 180) / Math.PI + 90) % 90;
+  }
+
+  // 2. Snap segments within 18° of dominant orthogonal grid
+  for (const s of segments) {
+    const a = ((s.angleDeg % 90) + 90) % 90;
+    let diff = a - domAngle;
+    if (diff > 45) diff -= 90;
+    if (diff < -45) diff += 90;
+
+    if (Math.abs(diff) < 18) {
+      const targetAngle = s.angleDeg - diff;
+      const tr = (targetAngle * Math.PI) / 180;
+      const nx = Math.sin(tr);
+      const ny = Math.cos(tr);
+      s.ux = nx;
+      s.uy = ny;
+      s.angleDeg = round3(((targetAngle % 360) + 360) % 360);
+      const h = s.length / 2;
+      s.a = { x: round3(s.cx - nx * h), y: round3(s.cy - ny * h) };
+      s.b = { x: round3(s.cx + nx * h), y: round3(s.cy + ny * h) };
+    }
+  }
+
+  // 3. Collinear merge: merge fragments along the same wall
+  const merged = [];
+  const used = new Uint8Array(segments.length);
+
+  for (let i = 0; i < segments.length; i++) {
+    if (used[i]) continue;
+    let cur = segments[i];
+    used[i] = 1;
+
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (let j = 0; j < segments.length; j++) {
+        if (used[j]) continue;
+        const other = segments[j];
+        if (cur.className !== other.className) continue;
+        const angleDiff = Math.abs(cur.angleDeg - other.angleDeg) % 180;
+        const dAngle = angleDiff > 90 ? 180 - angleDiff : angleDiff;
+        if (dAngle > 12) continue;
+
+        const ox = other.cx - cur.cx;
+        const oy = other.cy - cur.cy;
+        const perp = Math.abs(ox * -cur.uy + oy * cur.ux);
+        if (perp > 0.32) continue; // within 32cm of same wall line
+
+        const along = ox * cur.ux + oy * cur.uy;
+        const reach = cur.length / 2 + other.length / 2;
+        // Merge if overlapping or small gap (< 45cm; preserves doorways)
+        if (Math.abs(along) <= reach + 0.45) {
+          used[j] = 1;
+          grew = true;
+          const pts = [
+            (cur.a.x - cur.cx) * cur.ux + (cur.a.y - cur.cy) * cur.uy,
+            (cur.b.x - cur.cx) * cur.ux + (cur.b.y - cur.cy) * cur.uy,
+            (other.a.x - cur.cx) * cur.ux + (other.a.y - cur.cy) * cur.uy,
+            (other.b.x - cur.cx) * cur.ux + (other.b.y - cur.cy) * cur.uy,
+          ];
+          const tMin = Math.min.apply(null, pts);
+          const tMax = Math.max.apply(null, pts);
+          const newLen = tMax - tMin;
+          const midT = (tMin + tMax) / 2;
+          const newCx = cur.cx + cur.ux * midT;
+          const newCy = cur.cy + cur.uy * midT;
+          cur = Object.assign({}, cur, {
+            cx: round3(newCx),
+            cy: round3(newCy),
+            length: round3(newLen),
+            a: { x: round3(newCx + cur.ux * (tMin - midT)), y: round3(newCy + cur.uy * (tMin - midT)) },
+            b: { x: round3(newCx + cur.ux * (tMax - midT)), y: round3(newCy + cur.uy * (tMax - midT)) },
+            support: cur.support + other.support,
+            confidence: Math.max(cur.confidence, other.confidence),
+            ts: (cur.ts || []).concat(other.ts || []).sort((a, b) => a - b),
+          });
+        }
+      }
+    }
+    merged.push(cur);
+  }
+
+  return merged;
 }
 
 // ---------------------------------------------------------------------------
