@@ -272,9 +272,18 @@ function onSensorPulse(raw, diag) {
   }
 
   const p = pose.pose();
+  // A bearing taken mid-sweep is not a 30 deg beam pointed one way, it is that
+  // beam dragged across an arc while the pulse was in flight. Widening the beam
+  // by the arc actually crossed, and discounting confidence with slew rate, is
+  // what stops a fast hand sweep from painting crisp walls in the wrong places:
+  // the boundary layer draws a longer, weaker bar, and past ~150 deg/s the echo
+  // falls under its confidence gate and is not drawn at all.
+  const slew = pose.headingRate || 0;
+  const smearDeg = Math.min(40, slew * 0.08);
   const det = normalizeDetection(Object.assign({}, raw, {
     bearing_deg: p.heading,
-    beamwidth_deg: 30,
+    beamwidth_deg: 30 + smearDeg,
+    confidence: (raw.confidence == null ? 0.5 : raw.confidence) * Math.max(0.3, 1 - slew / 250),
     phone: p,
     source: 'live',
   }), 'live');
@@ -492,9 +501,14 @@ function renderPose(p) {
   ui.poseMethod.textContent = p.method === 'manual' ? 'MANUAL'
     : pose.poseMode === 'rotation' ? 'STATIONARY' : 'DEAD RECKONING';
   ui.poseConf.textContent = (p.confidence * 100).toFixed(0) + '%';
-  ui.poseNote.textContent = pose.poseMode === 'rotation'
+  // Sweep rate is the operator's main controllable error source, so it is shown
+  // as an instruction rather than a number they have to interpret.
+  const slewNote = st.headingRate > 150 ? ' Sweeping too fast — echoes are being discarded.'
+    : st.headingRate > 60 ? ' Slow the sweep: bearings are smearing.'
+      : '';
+  ui.poseNote.textContent = (pose.poseMode === 'rotation'
     ? 'Stationary scan: position locked at (0,0). Rotate in place.'
-    : st.note;
+    : st.note) + slewNote;
 }
 
 function renderCalibration(st) {
@@ -817,7 +831,9 @@ ui.btnPoseMode.addEventListener('click', () => {
   pose.setPoseMode(newMode);
   ui.btnPoseMode.textContent = newMode === 'rotation' ? 'STATIONARY (ROTATE)' : 'WALK (STEPS ACTIVE)';
   ui.btnPoseMode.classList.toggle('on', newMode === 'walk');
-  log('Pose mode: ' + (newMode === 'walk' ? 'Dead reckoning (steps active)' : 'Stationary (locked at 0,0)'), 'info');
+  log('Pose mode: ' + (newMode === 'walk'
+    ? 'Dead reckoning — only a steady walking gait moves the marker'
+    : 'Stationary (locked at 0,0)'), 'info');
   renderPose(pose.pose());
 });
 

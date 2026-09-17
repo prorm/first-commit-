@@ -90,6 +90,35 @@ No build step. `npm start` prints URLs + a QR code.
   white — white noise gives a jagged envelope no real receiver produces, and the
   classifier keys on roughness.
 
+## Pose — the two rules that make the map stop wobbling
+Both were the *same* visible bug: a room scan that snaked tens of metres across
+a room nobody walked, with walls that never lined up. Pinned by `tests/pose.test.js`.
+
+- **Heading is tilt-compensated, never raw `alpha`.** `360 - alpha` is only a
+  bearing when the phone lies flat. Aimed at a wall, beta approaches 90 deg,
+  where alpha and gamma are the *same* rotation — the browser can report any
+  (alpha, gamma) pair with a constant sum for one physical orientation, so alpha
+  alone swings by tens of degrees while the phone does not move. `orientationAxes()`
+  builds the full W3C rotation R = Rz(a)·Rx(b)·Ry(g) and returns two boresights:
+  the screen's top edge (flat/compass hold) and out the back of the phone (aimed
+  hold). Whichever is more horizontal wins, with 0.12 hysteresis. They are
+  orthogonal, so the winner always has ≥0.7 of horizontal projection — the
+  bearing is never ill-conditioned.
+- **A step needs a gait, not a bump.** Sweeping a phone by hand makes
+  acceleration peaks identical to footfalls under a threshold test. The gyro is
+  the discriminator: a sweep turns at 60–200 deg/s, a walker's hand does not.
+  Peaks above `maxStepRotDps` 45 are rejected outright; the rest must land in a
+  run of `gaitConfirm` 3 evenly-spaced intervals (280–1100 ms, each within
+  0.6–1.7x of the last) before any translation is committed, and the three
+  confirming peaks are credited together at that moment. **Default pose mode is
+  `rotation` (position locked at 0,0)** — walking is opt-in, because scanning
+  from one spot is the common case and the one phantom steps destroy.
+
+Sweep rate is also folded into the measurement rather than ignored: `phone.mjs`
+widens `beamwidth_deg` by the arc crossed during the pulse and scales confidence
+by `1 - rate/250`, so a fast sweep draws a longer, weaker boundary bar and past
+~150 deg/s falls under the boundary layer's 0.65 gate entirely.
+
 ## Classifier reality check — do not re-litigate
 EchoNet is EXPERIMENTAL and weak. 69.5% on synthetic validation, but **39% on
 the real recordings held out by whole session, against a 33% chance floor**; a

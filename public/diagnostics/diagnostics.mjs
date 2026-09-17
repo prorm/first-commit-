@@ -286,7 +286,16 @@ $('btnOrient').addEventListener('click', async () => {
     out('Heading ' + Math.round(st.pose.heading) + '° from ' + st.headingSource
       + (st.headingAbsolute ? ' (magnetometer-referenced)' : ' (relative only)'),
       st.headingAbsolute ? 'pass' : 'warn');
-    if (mEvents > 0) out('Steps counted during the test: ' + st.steps, 'pass');
+    out('Tilt-compensated off the ' + (st.aimAxis === 'aim' ? 'back of the phone (aimed)' : 'top edge (held flat)')
+      + ' · pitch ' + st.pitch + '°, roll ' + st.roll + '°', st.aimAxis ? 'pass' : 'warn');
+    out('Gyro: ' + (st.available.gyro ? st.rotRate + '°/s (step rejection active)'
+      : 'unavailable — hand sweeps cannot be told from footfalls'),
+      st.available.gyro ? 'pass' : 'warn');
+    if (mEvents > 0) {
+      out('Step-shaped peaks seen: ' + st.stepCandidates + ' · accepted as walking: ' + st.steps
+        + (st.stepCandidates > 0 && st.steps === 0
+          ? ' (correct: shaking in place is not a gait)' : ''), 'pass');
+    }
     else out('No motion events: dead reckoning is unavailable. Use the manual step control or simulation.', 'warn');
     renderAll();
   }, 5000);
