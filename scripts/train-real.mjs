@@ -215,15 +215,31 @@ async function main() {
       let seed = 20260917;
       const rng = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
       for (let ci = 0; ci < 3; ci++) {
-        for (let k = 0; k < 60; k++) {
+        for (let k = 0; k < 300; k++) {
           const r = 0.5 + rng() * 3.0;
-          const p = synthesizePulse(CLASSES[ci], r, rng, {});
+          const pointing = 0.2 + rng() * 0.8;
+          const p = synthesizePulse(CLASSES[ci], r, rng, { pointing });
           synthPulses.push({ win: p.win, classIndex: ci });
         }
       }
-      console.log(`✓ Synthesized ${synthPulses.length} acoustic rehearsal pulses for cross-domain stability.`);
+
+      // Also incorporate matched realistic synthetic pulses from synthetic_matched_rehearsal.json
+      const matchedPath = path.join(RECORDINGS_DIR, 'synthetic_matched_rehearsal.json');
+      if (fs.existsSync(matchedPath)) {
+        const d = JSON.parse(fs.readFileSync(matchedPath, 'utf8'));
+        const perClass = [[], [], []];
+        for (const s of (d.samples || [])) {
+          if (s.window && s.window.length === 64) perClass[s.classIndex].push(s);
+        }
+        for (let ci = 0; ci < 3; ci++) {
+          for (const s of perClass[ci].slice(0, 300)) {
+            synthPulses.push({ win: new Float32Array(s.window), classIndex: ci });
+          }
+        }
+      }
+      console.log(`✓ Prepared ${synthPulses.length} acoustic rehearsal pulses for cross-domain stability.`);
     } catch (e) {
-      console.log(`[Note] Could not synthesize rehearsal pulses (${e.message}), training on real data only.`);
+      console.log(`[Note] Could not prepare rehearsal pulses (${e.message}), training on real data only.`);
     }
   }
 
@@ -329,9 +345,9 @@ function fineTune(W, classSamples, synthPulses = []) {
   const m_fc2_b = new Float32Array(3), v_fc2_b = new Float32Array(3);
 
   const classWeights = [1.2, 1.0, 1.2]; // Balanced penalty
-  const baseLr = 0.005;
+  const baseLr = 0.003;
   const beta1 = 0.9, beta2 = 0.999, eps = 1e-8;
-  const epochs = 260;
+  const epochs = 150;
   let t = 0;
 
   for (let ep = 0; ep < epochs; ep++) {
@@ -435,9 +451,9 @@ function fineTune(W, classSamples, synthPulses = []) {
         }
       }
 
-      adamStep(fc1_w, g_fc1_w, m_fc1_w, v_fc1_w, 16 * 32);
+      adamStep(fc1_w, g_fc1_w, m_fc1_w, v_fc1_w, 16 * 32, 1e-5);
       adamStep(fc1_b, g_fc1_b, m_fc1_b, v_fc1_b, 16, 0);
-      adamStep(fc2_w, g_fc2_w, m_fc2_w, v_fc2_w, 3 * 16);
+      adamStep(fc2_w, g_fc2_w, m_fc2_w, v_fc2_w, 3 * 16, 1e-5);
       adamStep(fc2_b, g_fc2_b, m_fc2_b, v_fc2_b, 3, 0);
     }
   }
