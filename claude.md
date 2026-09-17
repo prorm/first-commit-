@@ -27,6 +27,16 @@ type Detection = {
 Reason: if Chrome audio fails, we swap ONLY the sensor module for a native
 Android bridge emitting the same Detection over local WebSocket. Zero UI rework.
 
+`obstacleClass` is WALL or SOFT (or null) on every live detection. 'OPENING'
+stays in the wire vocabulary only so pre-2026-09-18 recordings still replay —
+nothing derives it. An opening is the absence of a return, not a texture: CFAR
+takes the strongest peak past the gate, so aimed through a doorway the detector
+locks onto the far wall of the next room. Openings come from `findGapOpenings()`
+in reconstruct.mjs instead. The two-class rule lives in
+`public/shared/surfaceclass.mjs` and is enforced at all three re-entry points
+(pipeline, `normalizeDetection()`, `ClassFuser`) — adding a fourth consumer that
+takes a raw three-way argmax reintroduces the bug.
+
 ## Signal parameters — use these, do not re-derive
 - Linear FM chirp, Hann-windowed, 17,500→22,000 Hz, bandwidth 4500Hz
 - Chirp duration 15ms, pulse interval 50ms (20Hz), sample rate 48000Hz (NOT 44.1k)
@@ -79,6 +89,30 @@ No build step. `npm start` prints URLs + a QR code.
 - Simulation noise: matched-filter output noise must be **band-limited**, not
   white — white noise gives a jagged envelope no real receiver produces, and the
   classifier keys on roughness.
+
+## Classifier reality check — do not re-litigate
+EchoNet is EXPERIMENTAL and weak. 69.5% on synthetic validation, but **39% on
+the real recordings held out by whole session, against a 33% chance floor**; a
+synthetic-only model scores *below* chance on a two-class split. This is the
+dataset's ceiling, not a hyperparameter problem — a 300-tree random forest gets
+39.4% over every feature set tried. `scripts/diagnose-dataset.py` reports the
+three causes: the 5,250 pulses are 30 contiguous bursts of ~175 near-identical
+pulses (real sample size 30); `range_m` alone predicts the class at 37.8%
+because each class was recorded at its own standoff; and OPENING-labelled pulses
+carry the *highest* target strength of any class, which is physically backwards.
+
+Do not tune hyperparameters to chase this number. The fixes that would actually
+move it are, in order: sub-band spectral tilt (two matched filters across the
+chirp band — soft absorbers roll off high frequencies, and this survives peak
+normalisation); range-compensated amplitude as a model input; a window that
+reaches past the ±11 cm the current 64-sample peak-centred one covers, into the
+reverberant tail; and re-collection with range decorrelated from class (many
+short bursts across many scenes, not few scenes × many pulses).
+
+`npm run train-real` splits by session, skips duplicate sessions, and refuses to
+export weights that regress on holdout. Never evaluate by shuffling pulses —
+neighbouring pulses in a burst are near-copies and a random split reads ~62%
+where the honest number is ~37%.
 
 ## Build status
 All of the above is built and tested; see STATUS.md for measured numbers and
