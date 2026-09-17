@@ -91,11 +91,11 @@
 <!-- Pose control & sensor modes -->
 <section class="panel" id="posePanel">
   <div class="panel-head">
-    <span>POSE — <b id="poseMethod">ROOM SCAN</b></span>
+    <span>POSE — <b id="poseMethod">DEAD RECKONING</b></span>
     <span id="poseConf">--</span>
   </div>
   <div class="pose-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 6px;">
-    <button class="btn btn-sm on" id="btnPoseMode">MODE: ROOM SCAN</button>
+    <button class="btn btn-sm on" id="btnPoseMode">WALK (STEPS ACTIVE)</button>
     <button class="btn btn-sm" id="btnZeroPose" style="border-color: rgba(44,232,245,0.4);">ZERO POSE (0,0)</button>
   </div>
   <div class="pose-grid">
@@ -103,7 +103,7 @@
     <button class="btn btn-sm" id="btnWalk">STEP 0.7 m</button>
     <button class="btn btn-sm" id="btnTurnR">15&deg; &#8631;</button>
   </div>
-  <div class="panel-note" id="poseNote">Room scan mode locks position at (0,0) so you can rotate 360° to map the room with zero drift.</div>
+  <div class="panel-note" id="poseNote">Dead reckoning active: counts steps and tracks heading as you walk.</div>
 </section>
 
 <section class="panel">

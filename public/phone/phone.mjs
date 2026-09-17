@@ -490,10 +490,10 @@ function renderPose(p) {
   ui.headingSub.textContent = st.headingSource === 'none' ? 'no sensor'
     : st.headingAbsolute ? 'compass' : st.headingSource === 'manual' ? 'manual' : 'relative';
   ui.poseMethod.textContent = p.method === 'manual' ? 'MANUAL'
-    : pose.poseMode === 'rotation' ? 'ROOM SCAN' : p.method.toUpperCase();
+    : pose.poseMode === 'rotation' ? 'STATIONARY' : 'DEAD RECKONING';
   ui.poseConf.textContent = (p.confidence * 100).toFixed(0) + '%';
   ui.poseNote.textContent = pose.poseMode === 'rotation'
-    ? 'Room scan: position locked at (0,0). Rotate 360° to map room.'
+    ? 'Stationary scan: position locked at (0,0). Rotate in place.'
     : st.note;
 }
 
@@ -815,9 +815,9 @@ ui.btnVoice.addEventListener('click', () => {
 ui.btnPoseMode.addEventListener('click', () => {
   const newMode = pose.poseMode === 'rotation' ? 'walk' : 'rotation';
   pose.setPoseMode(newMode);
-  ui.btnPoseMode.textContent = newMode === 'rotation' ? 'MODE: ROOM SCAN' : 'MODE: WALK (STEPS)';
-  ui.btnPoseMode.classList.toggle('on', newMode === 'rotation');
-  log('Pose mode: ' + (newMode === 'rotation' ? 'Room Scan (locked at 0,0)' : 'Walk (step detection active)'), 'info');
+  ui.btnPoseMode.textContent = newMode === 'rotation' ? 'STATIONARY (ROTATE)' : 'WALK (STEPS ACTIVE)';
+  ui.btnPoseMode.classList.toggle('on', newMode === 'walk');
+  log('Pose mode: ' + (newMode === 'walk' ? 'Dead reckoning (steps active)' : 'Stationary (locked at 0,0)'), 'info');
   renderPose(pose.pose());
 });
 

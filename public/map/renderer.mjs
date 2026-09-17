@@ -192,10 +192,9 @@ export class MapRenderer {
     if (this.layers.truth && world.truth) this.drawTruth(c, world.truth);
     if (this.layers.surfaces && world.reconstruction) this.drawReconstruction(c, world.reconstruction, now);
     if (this.layers.cloud && world.cloud) this.drawCloud(c, world.cloud, world.reconstruction, now);
-    // Boundaries sit above the cloud and the occupancy grid on purpose: the
-    // occupied cells behind them are the same cyan, and a wall that reads as
-    // one crisp edge over the blocks is the whole blueprint effect.
-    if (this.layers.surfaces && world.boundaries) this.drawBoundaries(c, world.boundaries, now);
+    // Raw tangent chords disabled: single-echo tangents assume perpendicular incidence
+    // which distorts walls into tilted spokes. Real wall surfaces are drawn by reconstruct.mjs PCA fits.
+    // if (this.layers.surfaces && world.boundaries) this.drawBoundaries(c, world.boundaries, now);
     if (world.trajectory) this.drawTrajectory(c, world.trajectory, now);
     this.drawPulses(c, now);
     if (world.pose) this.drawSensor(c, world.pose, world.lastDetection, now);
@@ -313,8 +312,8 @@ export class MapRenderer {
   drawReconstruction(c, recon, now) {
     const t = this.reconAnim;
     if (!recon || !recon.segments) return;
-    // Surfaces are always drawn faintly; the RECONSTRUCT action brings them up.
-    const base = 0.22 + 0.78 * t;
+    // Surfaces are drawn clearly; the RECONSTRUCT action brings them to full glow.
+    const base = 0.52 + 0.48 * t;
 
     for (const s of recon.segments) {
       const a = this.toScreen(s.a.x, s.a.y);

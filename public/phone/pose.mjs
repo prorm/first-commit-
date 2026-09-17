@@ -34,13 +34,13 @@ export class PoseEstimator {
     this.headingSource = 'none';
     this.headingAbsolute = false;
     this.hasAbsoluteOrientation = false;
-    this.poseMode = opts.poseMode || 'rotation'; // 'rotation' (stationary room scan) or 'walk' (step counting)
+    this.poseMode = opts.poseMode || 'walk'; // default to dead-reckoning walking mode
     this.rawAlpha = null;
     this.pitch = 0;
     this.roll = 0;
     this.steps = 0;
     this.distance = 0;
-    this.method = 'static';
+    this.method = 'dead-reckoning';
     this.lastStepAt = 0;
     this.available = { orientation: false, motion: false, compass: false };
     this.permission = { orientation: 'unknown', motion: 'unknown' };
@@ -50,8 +50,8 @@ export class PoseEstimator {
     this.accSlow = 9.81;
     this.armed = false;
     this.peak = 0;
-    this.stepThreshold = 2.4;                   // m/s^2 above the slow average (robust against hand tremor)
-    this.minStepIntervalMs = 380;
+    this.stepThreshold = 1.6;                   // m/s^2 above slow average, responsive for natural walking
+    this.minStepIntervalMs = 280;
 
     this.boundOrientation = (e) => this.onOrientation(e);
     this.boundMotion = (e) => this.onMotion(e);
@@ -168,8 +168,8 @@ export class PoseEstimator {
   }
 
   onMotion(e) {
-    // Only detect steps if in walk mode
-    if (this.poseMode !== 'walk') return;
+    // Only pause step detection if user explicitly locked to stationary rotation mode
+    if (this.poseMode === 'rotation') return;
 
     const a = e && (e.accelerationIncludingGravity || e.acceleration);
     if (!a || a.x == null) return;
