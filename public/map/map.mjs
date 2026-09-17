@@ -25,7 +25,7 @@ const ui = {
   missionLine: $('missionLine'), statGrid: $('statGrid'), reconLine: $('reconLine'),
   aiProbs: $('aiProbs'), aiHist: $('aiHist'), aiVerdict: $('aiVerdict'), aiNote: $('aiNote'), aiMeta: $('aiMeta'),
   btnMission: $('btnMission'), btnZero: $('btnZero'), btnRecon: $('btnRecon'),
-  btnReplay: $('btnReplay'), btnRecord: $('btnRecord'), btnFit: $('btnFit'),
+  btnReplay: $('btnReplay'), btnRecord: $('btnRecord'), btnFit: $('btnFit'), btnReset: $('btnReset'),
   selMode: $('selMode'), selScenario: $('selScenario'),
   layGrid: $('layGrid'), layCloud: $('layCloud'), laySurf: $('laySurf'), layTruth: $('layTruth'),
   voiceLabel: $('voiceLabel'), cueText: $('cueText'),
@@ -541,6 +541,13 @@ ui.btnFit.addEventListener('click', () => {
   const b = worldBounds(world.cloud.points, world.trajectory, world.pose);
   renderer.follow = false;
   if (b) renderer.fitTo(b);
+});
+
+ui.btnReset.addEventListener('click', () => {
+  resetWorld();
+  renderer.clearReconstruction();
+  if (world.pose) renderer.centerOn(world.pose.x, world.pose.y);
+  renderChrome();
 });
 
 ui.selMode.addEventListener('change', () => {

@@ -434,23 +434,30 @@ export class Trajectory {
 
   push(pose, t) {
     const last = this.nodes[this.nodes.length - 1];
+    let jump = false;
     if (last) {
       const d = Math.hypot(pose.x - last.x, pose.y - last.y);
-      if (d < this.minStep && Math.abs(angleDelta(last.heading, pose.heading)) < 8) return false;
-      this.distance += d;
+      // Spike guard: If distance jumps by more than 2.5 metres in one frame,
+      // that is a teleport/re-zero/initial sync, NOT continuous walking.
+      if (d > 2.5) {
+        jump = true;
+      } else {
+        if (d < this.minStep && Math.abs(angleDelta(last.heading, pose.heading)) < 8) return false;
+        this.distance += d;
+      }
     }
-    this.nodes.push({ x: pose.x, y: pose.y, heading: pose.heading, c: pose.confidence, t: t || Date.now() });
+    this.nodes.push({ x: pose.x, y: pose.y, heading: pose.heading, c: pose.confidence, t: t || Date.now(), jump });
     if (this.nodes.length > 3000) this.nodes.splice(0, 500);
     return true;
   }
 
   serialize() {
-    return { distance: r3(this.distance), nodes: this.nodes.map((n) => ({ x: r3(n.x), y: r3(n.y), h: Math.round(n.heading), c: r3(n.c), t: n.t })) };
+    return { distance: r3(this.distance), nodes: this.nodes.map((n) => ({ x: r3(n.x), y: r3(n.y), h: Math.round(n.heading), c: r3(n.c), t: n.t, j: n.jump ? 1 : 0 })) };
   }
 
   loadSerialized(s) {
     this.distance = (s && s.distance) || 0;
-    this.nodes = ((s && s.nodes) || []).map((n) => ({ x: n.x, y: n.y, heading: n.h, c: n.c, t: n.t }));
+    this.nodes = ((s && s.nodes) || []).map((n) => ({ x: n.x, y: n.y, heading: n.h, c: n.c, t: n.t, jump: !!n.j }));
   }
 
   reset() { this.nodes = []; this.distance = 0; }

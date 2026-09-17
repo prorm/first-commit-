@@ -28,6 +28,7 @@ const ui = {
   btnScan: $('btnScan'), btnScanText: $('btnScanText'), btnMission: $('btnMission'),
   btnCalibrate: $('btnCalibrate'), btnAudio: $('btnAudio'), btnVoice: $('btnVoice'), btnMode: $('btnMode'),
   poseMethod: $('poseMethod'), poseConf: $('poseConf'), poseNote: $('poseNote'),
+  btnPoseMode: $('btnPoseMode'), btnZeroPose: $('btnZeroPose'),
   btnTurnL: $('btnTurnL'), btnTurnR: $('btnTurnR'), btnWalk: $('btnWalk'),
   voiceLabel: $('voiceLabel'), cueText: $('cueText'),
   log: $('log'), logCount: $('logCount'), logPanel: $('logPanel'), logToggle: $('logToggle'),
@@ -488,9 +489,12 @@ function renderPose(p) {
   const st = pose.status();
   ui.headingSub.textContent = st.headingSource === 'none' ? 'no sensor'
     : st.headingAbsolute ? 'compass' : st.headingSource === 'manual' ? 'manual' : 'relative';
-  ui.poseMethod.textContent = p.method.toUpperCase();
+  ui.poseMethod.textContent = p.method === 'manual' ? 'MANUAL'
+    : pose.poseMode === 'rotation' ? 'ROOM SCAN' : p.method.toUpperCase();
   ui.poseConf.textContent = (p.confidence * 100).toFixed(0) + '%';
-  ui.poseNote.textContent = st.note;
+  ui.poseNote.textContent = pose.poseMode === 'rotation'
+    ? 'Room scan: position locked at (0,0). Rotate 360° to map room.'
+    : st.note;
 }
 
 function renderCalibration(st) {
@@ -806,6 +810,25 @@ ui.btnVoice.addEventListener('click', () => {
   if (!state.voiceOn) guidance.voice.cancel();
   ui.btnVoice.textContent = state.voiceOn ? 'VOICE ON' : 'VOICE OFF';
   ui.btnVoice.classList.toggle('off', !state.voiceOn);
+});
+
+ui.btnPoseMode.addEventListener('click', () => {
+  const newMode = pose.poseMode === 'rotation' ? 'walk' : 'rotation';
+  pose.setPoseMode(newMode);
+  ui.btnPoseMode.textContent = newMode === 'rotation' ? 'MODE: ROOM SCAN' : 'MODE: WALK (STEPS)';
+  ui.btnPoseMode.classList.toggle('on', newMode === 'rotation');
+  log('Pose mode: ' + (newMode === 'rotation' ? 'Room Scan (locked at 0,0)' : 'Walk (step detection active)'), 'info');
+  renderPose(pose.pose());
+});
+
+ui.btnZeroPose.addEventListener('click', () => {
+  pose.zero();
+  log('Pose re-zeroed to (0, 0)', 'info');
+  renderPose(pose.pose());
+  if (net && net.isOpen()) {
+    net.send('pose', { pose: pose.pose() });
+  }
+  playChime(true);
 });
 
 ui.btnTurnL.addEventListener('click', () => pose.manualTurn(-15));

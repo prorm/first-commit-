@@ -28,9 +28,13 @@ export class PoseEstimator {
     this.x = 0;
     this.y = 0;
     this.heading = 0;
+    this.smoothedHeading = null;
+    this.spikeFrames = 0;
     this.headingOffset = 0;
     this.headingSource = 'none';
     this.headingAbsolute = false;
+    this.hasAbsoluteOrientation = false;
+    this.poseMode = opts.poseMode || 'rotation'; // 'rotation' (stationary room scan) or 'walk' (step counting)
     this.rawAlpha = null;
     this.pitch = 0;
     this.roll = 0;
@@ -46,8 +50,8 @@ export class PoseEstimator {
     this.accSlow = 9.81;
     this.armed = false;
     this.peak = 0;
-    this.stepThreshold = 1.6;                   // m/s^2 above the slow average
-    this.minStepIntervalMs = 260;
+    this.stepThreshold = 2.4;                   // m/s^2 above the slow average (robust against hand tremor)
+    this.minStepIntervalMs = 380;
 
     this.boundOrientation = (e) => this.onOrientation(e);
     this.boundMotion = (e) => this.onMotion(e);
@@ -115,8 +119,19 @@ export class PoseEstimator {
   onOrientation(e) {
     if (e == null) return;
     this.available.orientation = true;
+
+    // Guard against dual-listener conflict on Android Chrome:
+    // If deviceorientationabsolute is available, ignore relative deviceorientation events
+    const isAbsolute = !!e.absolute || e.type === 'deviceorientationabsolute';
+    if (isAbsolute) {
+      this.hasAbsoluteOrientation = true;
+    } else if (this.hasAbsoluteOrientation) {
+      return; // Stick to the absolute stream; don't oscillate reference frames!
+    }
+
+    let rawH = null;
     if (typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) {
-      this.heading = wrap(e.webkitCompassHeading);
+      rawH = wrap(e.webkitCompassHeading);
       this.headingSource = 'compass';
       this.headingAbsolute = true;
       this.available.compass = true;
@@ -124,18 +139,38 @@ export class PoseEstimator {
       this.rawAlpha = e.alpha;
       // alpha counts anticlockwise from the device's reference; compass
       // heading is clockwise, hence 360 - alpha.
-      const h = wrap(360 - e.alpha + this.headingOffset);
-      this.heading = h;
-      this.headingAbsolute = !!e.absolute;
-      this.headingSource = e.absolute ? 'orientation-absolute' : 'orientation-relative';
+      rawH = wrap(360 - e.alpha + this.headingOffset);
+      this.headingAbsolute = isAbsolute;
+      this.headingSource = isAbsolute ? 'orientation-absolute' : 'orientation-relative';
     }
+
+    // Circular low-pass EMA filter to eliminate sensor jitter
+    if (rawH != null) {
+      if (this.smoothedHeading == null) {
+        this.smoothedHeading = rawH;
+      } else {
+        const diff = shortestAngleDiff(rawH, this.smoothedHeading);
+        // Slew limiter: reject single-frame wild jumps (>85 deg) unless sustained
+        if (Math.abs(diff) > 85 && this.spikeFrames < 3) {
+          this.spikeFrames++;
+        } else {
+          this.spikeFrames = 0;
+          this.smoothedHeading = wrap(this.smoothedHeading + diff * 0.25);
+        }
+      }
+      this.heading = Math.round(this.smoothedHeading * 10) / 10;
+    }
+
     if (typeof e.beta === 'number') this.pitch = e.beta;
     if (typeof e.gamma === 'number') this.roll = e.gamma;
-    this.method = this.available.motion ? 'dead-reckoning' : 'static';
+    this.method = this.poseMode === 'walk' ? 'dead-reckoning' : 'static';
     this.emit();
   }
 
   onMotion(e) {
+    // Only detect steps if in walk mode
+    if (this.poseMode !== 'walk') return;
+
     const a = e && (e.accelerationIncludingGravity || e.acceleration);
     if (!a || a.x == null) return;
     this.available.motion = true;
@@ -191,19 +226,32 @@ export class PoseEstimator {
   manualTurn(deg) {
     if (this.headingSource === 'none' || this.headingSource === 'manual') {
       this.heading = wrap(this.heading + deg);
+      this.smoothedHeading = this.heading;
       this.headingSource = 'manual';
     } else {
       // A live sensor stays in charge; the operator is trimming its origin.
       this.headingOffset = wrap(this.headingOffset + deg);
-      if (this.rawAlpha != null) this.heading = wrap(360 - this.rawAlpha + this.headingOffset);
+      if (this.rawAlpha != null) {
+        const raw = wrap(360 - this.rawAlpha + this.headingOffset);
+        this.smoothedHeading = raw;
+        this.heading = raw;
+      }
     }
     this.emit();
   }
 
   setHeading(deg) {
     this.heading = wrap(deg);
+    this.smoothedHeading = wrap(deg);
     this.headingSource = 'manual';
     this.emit();
+  }
+
+  setPoseMode(mode) {
+    this.poseMode = mode === 'walk' ? 'walk' : 'rotation';
+    this.method = this.poseMode === 'walk' ? 'dead-reckoning' : 'static';
+    this.emit();
+    return this.poseMode;
   }
 
   /** Declare "this is where I am, facing this way" — resets accumulated drift. */
@@ -215,6 +263,9 @@ export class PoseEstimator {
     if (headingDeg != null) {
       if (this.rawAlpha != null) this.headingOffset = wrap(headingDeg - (360 - this.rawAlpha));
       this.heading = wrap(headingDeg);
+      this.smoothedHeading = wrap(headingDeg);
+    } else if (this.smoothedHeading != null) {
+      this.heading = Math.round(this.smoothedHeading * 10) / 10;
     }
     this.emit();
   }
@@ -270,3 +321,10 @@ export class PoseEstimator {
 }
 
 function wrap(d) { const x = d % 360; return x < 0 ? x + 360 : x; }
+
+function shortestAngleDiff(target, source) {
+  let diff = (target - source) % 360;
+  if (diff < -180) diff += 360;
+  if (diff > 180) diff -= 360;
+  return diff;
+}

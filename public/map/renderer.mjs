@@ -366,7 +366,7 @@ export class MapRenderer {
     // Openings: the demo's payoff, so they are labelled with their evidence
     // and confidence rather than just marked.
     for (const o of recon.openings || []) {
-      if ((o.confidence || 0) < 0.12) continue;
+      if ((o.confidence || 0) < 0.45) continue;
       const p = this.toScreen(o.x, o.y);
       const pulse = 0.55 + 0.45 * Math.sin(now / 420);
       const alpha = (0.25 + 0.75 * o.confidence) * (0.35 + 0.65 * t);
@@ -431,6 +431,8 @@ export class MapRenderer {
 
       const rgb = BOUNDARY_RGB[s.className] || LIVE_RGB;
       const str = Math.max(0, Math.min(1, s.strength));
+      // Prune single-hit or weak stray noise bars so the map looks clean and architectural
+      if (s.hits < 2 && str < 0.45) continue;
       // Repeated confirmation reads as solidity. Strength saturates quickly
       // (it is only pulled down by contradiction), so the number of looks is
       // what actually separates a surveyed wall from a single glance — and it
@@ -548,6 +550,7 @@ export class MapRenderer {
     c.lineCap = 'round';
     c.lineJoin = 'round';
     for (let i = 1; i < nodes.length; i++) {
+      if (nodes[i].jump) continue; // Don't draw line across teleports/re-zeros
       const a = this.toScreen(nodes[i - 1].x, nodes[i - 1].y);
       const b = this.toScreen(nodes[i].x, nodes[i].y);
       const recency = i / nodes.length;
