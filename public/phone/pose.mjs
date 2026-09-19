@@ -138,11 +138,11 @@ export class PoseEstimator {
     this.rotRate = 0;                           // deg/s, smoothed gyro magnitude
     this.armed = false;
     this.peak = 0;
-    this.stepThreshold = opts.stepThreshold || 2.0;  // m/s^2 above slow average
+    this.stepThreshold = opts.stepThreshold || 0.8;  // m/s^2 above slow average
     this.minStepIntervalMs = 280;
     this.maxStepIntervalMs = 1100;              // slower than this is not a gait
     this.maxStepRotDps = opts.maxStepRotDps || 45;   // above this you are waving, not walking
-    this.gaitConfirm = opts.gaitConfirm || 3;   // evenly-spaced peaks before we believe it
+    this.gaitConfirm = opts.gaitConfirm || 1;   // evenly-spaced peaks before we believe it
 
     // Heading filter.
     this.headingDeadbandDeg = 0.4;              // below this it is sensor shimmer
