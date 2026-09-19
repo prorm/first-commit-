@@ -922,6 +922,69 @@ test('AWS adapter reports Polly ready when a region and keys are present', () =>
   assert.ok(/ENABLE_BEDROCK|BEDROCK_MODEL_ID/.test(st.bedrock.reason));
 });
 
+test('an EC2 instance role is recognised only when declared', () => {
+  // A role leaves no env var behind, so without the flag Polly must stay off
+  // rather than guess; with it, the SDK's default chain does the lookup.
+  const base = { AWS_REGION: 'us-east-1' };
+  assert.equal(new AwsAdapter(base).status().credentialsDetected, false);
+  const role = new AwsAdapter(Object.assign({ AWS_USE_INSTANCE_ROLE: 'true' }, base)).status();
+  assert.equal(role.credentialsDetected, true);
+  assert.equal(role.credentialSource, 'profile-or-role');
+});
+
+test('S3 archive is off by default, says why, and archives with a fake client', async () => {
+  const off = new AwsAdapter({});
+  assert.equal(off.status().s3.enabled, false);
+  assert.ok(/S3_BUCKET/.test(off.status().s3.reason));
+  assert.equal((await off.archiveRecording('scan-1', '{}')).ok, false);
+
+  const env = { AWS_REGION: 'us-east-1', AWS_USE_INSTANCE_ROLE: 'true', S3_BUCKET: 'demo-bucket', S3_PREFIX: 'scans' };
+  const aws = new AwsAdapter(env);
+  assert.equal(aws.status().s3.enabled, true);
+  assert.equal(aws.status().s3.prefix, 'scans/', 'prefix is normalised to end in a slash');
+
+  const sent = [];
+  aws.archive.client = { send: async (cmd) => { sent.push(cmd.input); } };
+  const res = await aws.archiveRecording('scan-2026-09-19', '{"frames":[]}');
+  assert.equal(res.ok, true);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].Bucket, 'demo-bucket');
+  assert.equal(sent[0].Key, 'scans/scan-2026-09-19.json');
+  assert.equal(sent[0].ContentType, 'application/json');
+
+  // Path tricks in an id cannot escape the prefix.
+  await aws.archiveRecording('../../etc/passwd', '{}');
+  assert.ok(sent[1].Key.startsWith('scans/') && !sent[1].Key.includes('/../') && !sent[1].Key.slice(6).includes('/'));
+
+  // A failing upload is reported and counted, never thrown.
+  aws.archive.client = { send: async () => { const e = new Error('denied'); e.name = 'AccessDenied'; throw e; } };
+  const bad = await aws.archiveRecording('scan-3', '{}');
+  assert.equal(bad.ok, false);
+  assert.ok(/AccessDenied/.test(bad.error));
+  assert.equal(aws.stats.s3Uploads, 2);
+  assert.equal(aws.stats.s3Failures, 1);
+});
+
+test('a finished recording is handed to the archive hook without blocking the save', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { RECORDINGS_DIR } = require('../server/recorder');
+  const calls = [];
+  const rec = new Recorder({ onSaved: (id, json) => { calls.push({ id, json }); throw new Error('hook blew up'); } });
+  rec.start({ mode: 'simulation', note: 'archive-hook-test' });
+  rec.push('pose', { x: 0, y: 0 });
+  const saved = rec.stop();
+  try {
+    assert.ok(!saved.persistError, 'a throwing hook must not turn a saved scan into an error');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].id, saved.id);
+    assert.equal(JSON.parse(calls[0].json).frames.length, 1);
+    assert.ok(fs.existsSync(path.join(RECORDINGS_DIR, saved.id + '.json')), 'local copy still written first');
+  } finally {
+    try { fs.unlinkSync(path.join(RECORDINGS_DIR, saved.id + '.json')); } catch (e) { /* already gone */ }
+  }
+});
+
 test('Bedrock prompt carries the measured numbers and the model limits', () => {
   const { BedrockSummarizer } = require('../server/aws/bedrock');
   const b = new BedrockSummarizer({ region: 'eu-west-1', modelId: 'anthropic.test', enabled: false });

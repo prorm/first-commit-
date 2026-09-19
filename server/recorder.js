@@ -18,8 +18,12 @@ const path = require('node:path');
 const DIR = path.join(__dirname, '..', 'recordings');
 
 class Recorder {
-  constructor() {
+  /** @param {{onSaved?: (id:string, json:string) => void}} [opts] */
+  constructor(opts = {}) {
     this.active = null;
+    // Called once per recording after the local file is written. Best-effort:
+    // a throwing or rejecting hook must never turn a saved scan into an error.
+    this.onSaved = opts.onSaved || null;
     this.ensureDir();
   }
 
@@ -58,10 +62,17 @@ class Recorder {
     rec.durationMs = rec.endedAt - rec.startedAt;
     rec.frameCount = rec.frames.length;
     this.active = null;
+    let json;
     try {
-      fs.writeFileSync(path.join(DIR, rec.id + '.json'), JSON.stringify(rec));
+      json = JSON.stringify(rec);
+      fs.writeFileSync(path.join(DIR, rec.id + '.json'), json);
     } catch (e) {
       return Object.assign({ persistError: e.message }, this.describe(rec));
+    }
+    if (this.onSaved) {
+      try {
+        Promise.resolve(this.onSaved(rec.id, json)).catch(() => {});
+      } catch (e) { /* archiving is optional */ }
     }
     return this.describe(rec);
   }

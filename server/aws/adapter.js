@@ -13,13 +13,17 @@
  */
 const { PollyVoice } = require('./polly');
 const { BedrockSummarizer } = require('./bedrock');
+const { S3Archive } = require('./s3');
 
 class AwsAdapter {
   constructor(env = process.env) {
     this.region = (env.AWS_REGION || env.AWS_DEFAULT_REGION || '').trim();
     this.hasStaticKeys = !!(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY);
-    // A container/EC2/SSO profile can supply credentials without static keys.
-    this.hasProfile = !!(env.AWS_PROFILE || env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || env.AWS_WEB_IDENTITY_TOKEN_FILE);
+    // A container/SSO profile can supply credentials without static keys.
+    // An EC2 instance role leaves no environment variable behind, so it has to
+    // be declared: AWS_USE_INSTANCE_ROLE=true lets the SDK's chain find it.
+    this.hasProfile = !!(env.AWS_PROFILE || env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || env.AWS_WEB_IDENTITY_TOKEN_FILE
+      || String(env.AWS_USE_INSTANCE_ROLE || '').toLowerCase() === 'true');
     this.credentialsLikely = !!this.region && (this.hasStaticKeys || this.hasProfile);
 
     this.voiceId = env.POLLY_VOICE_ID || 'Matthew';
@@ -39,7 +43,36 @@ class AwsAdapter {
       enabled: this.credentialsLikely && this.bedrockEnabled,
     });
 
-    this.stats = { pollyCalls: 0, pollyFailures: 0, bedrockCalls: 0, bedrockFailures: 0, cacheHits: 0 };
+    this.s3Bucket = (env.S3_BUCKET || '').trim();
+    this.archive = new S3Archive({
+      region: this.region,
+      bucket: this.s3Bucket,
+      prefix: env.S3_PREFIX || 'recordings/',
+      enabled: this.credentialsLikely,
+    });
+
+    this.stats = {
+      pollyCalls: 0, pollyFailures: 0, bedrockCalls: 0, bedrockFailures: 0, cacheHits: 0,
+      s3Uploads: 0, s3Failures: 0,
+    };
+  }
+
+  /**
+   * Second, durable copy of a finished recording.  Never throws and never has
+   * to be awaited: the local file is the source of truth for replay.
+   */
+  async archiveRecording(id, body) {
+    if (!this.archive.enabled) return { ok: false, error: this.s3UnavailableReason() };
+    const res = await this.archive.upload(id, body);
+    if (res.ok) {
+      this.stats.s3Uploads++;
+    } else {
+      this.stats.s3Failures++;
+      // Nothing awaits this, so without a log line a bad bucket name, region or
+      // permission would fail invisibly.
+      console.warn('[warn] S3 archive failed for ' + id + ': ' + res.error);
+    }
+    return res;
   }
 
   /**
@@ -101,6 +134,13 @@ class AwsAdapter {
     return 'Bedrock available';
   }
 
+  s3UnavailableReason() {
+    if (!this.s3Bucket) return 'S3_BUCKET not set';
+    if (!this.credentialsLikely) return 'no AWS credentials in environment';
+    if (!this.archive.sdkAvailable) return '@aws-sdk/client-s3 not installed';
+    return 'S3 archive available';
+  }
+
   /** What the diagnostics page and the map's status bar display. */
   status() {
     return {
@@ -120,6 +160,13 @@ class AwsAdapter {
         modelId: this.bedrockModelId || null,
         sdkAvailable: this.bedrock.sdkAvailable,
         reason: this.bedrockUnavailableReason(),
+      },
+      s3: {
+        enabled: this.archive.enabled,
+        bucket: this.s3Bucket || null,
+        prefix: this.archive.prefix,
+        sdkAvailable: this.archive.sdkAvailable,
+        reason: this.s3UnavailableReason(),
       },
       stats: Object.assign({}, this.stats),
     };
