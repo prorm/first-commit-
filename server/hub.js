@@ -35,7 +35,8 @@ class Hub {
     this.nextId = 1;
     this.mode = 'simulation';          // safe default: works with no phone
     this.map = new MapState();
-    this.recorder = new Recorder();
+    // `this.aws` is assigned below; the hook only runs later, when a scan ends.
+    this.recorder = new Recorder({ onSaved: (id, json) => this.aws.archiveRecording(id, json) });
     this.guidance = new GuidancePolicy();
     this.aws = new AwsAdapter(process.env);
     this.replay = null;

@@ -459,10 +459,13 @@ curl -s http://localhost:8000/api/aws
 
 ## ☁️ AWS Cloud Integration (Optional)
 
-SentryShield operates 100% locally with zero external dependencies. If AWS credentials are provided, two enhanced features activate automatically:
+SentryShield operates 100% locally with zero external dependencies. If AWS credentials are provided, these enhanced features activate automatically:
 
 1. **Amazon Polly:** High-clarity speech synthesis for spoken spatial alerts streamed to the phone. (Falls back to browser `window.speechSynthesis` if offline).
-2. **Amazon Bedrock (Claude 3.5 Sonnet):** Post-mission structural analysis summary generated from the final geometry and confidence statistics.
+2. **Amazon Bedrock (text model, set by `BEDROCK_MODEL_ID`):** Post-mission structural analysis summary generated from the final geometry and confidence statistics.
+3. **Amazon S3 (optional, `S3_BUCKET`):** Each finished recording is also uploaded as a durable copy. Local disk stays the source of truth for replay.
+
+To run it on EC2 with an instance role, see [DEPLOY.md](DEPLOY.md).
 
 To enable, copy `.env.example` to `.env` and provide standard credentials:
 ```bash
@@ -482,6 +485,7 @@ BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20240620-v1:0
 
 - **[DEMO.md](DEMO.md)** — Step-by-step 2–3 minute hackathon presentation script, keyboard shortcuts, and live troubleshooting guide.
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — In-depth physics, DSP pipeline mathematics, occupancy grid derivation, and EchoNet layer design.
+- **[DEPLOY.md](DEPLOY.md)** — Deploying on AWS EC2: IAM role, Polly, Bedrock, S3 recording archive, CloudFront HTTPS.
 - **[STATUS.md](STATUS.md)** — Complete breakdown of completed features, synthetic vs hardware validation, and known acoustic limits.
 - **[PROTOCOL.md](PROTOCOL.md)** — JSON WebSocket frame schemas for sensor telemetry, map snapshots, and control events.
 
