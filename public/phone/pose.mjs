@@ -280,6 +280,9 @@ export class PoseEstimator {
     // has no horizontal bearing at all.  Hold the last good heading; anything
     // else would spin the map while the operator looks down.
     if (sensorH != null) {
+      // The demo is deliberately axis-aligned: remove small hand and gyro
+      // errors before they become diagonal dead-reckoning in the map.
+      sensorH = wrap(Math.round(sensorH / 90) * 90);
       this.rawHeading = sensorH;
       this._applyHeading(wrap(sensorH + this.headingOffset));
     }

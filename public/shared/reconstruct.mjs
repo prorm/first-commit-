@@ -27,7 +27,7 @@ const DEF = {
   maxSupportGap: 1.6,      // [m] unsupported stretch inside a fit -> two walls
   maxSplitDepth: 6,
   cornerAngleDeg: 55,      // segments meeting sharper than this = corner
-  cornerReach: 1.1,        // [m] how far a fitted line may be extended to meet another
+  cornerReach: 1.35,       // [m] how far a fitted line may be extended to meet another
   gapMin: 0.55,            // [m] along-axis gap that could be a doorway
   gapMax: 1.60,            // [m] wider than a door -> just unscanned space
   corridorWidthMax: 2.6,   // [m] parallel walls closer than this = corridor
@@ -317,7 +317,7 @@ function toSegment(fit, cfg) {
 /**
  * Manhattan Map Matching & Collinear Wall Merging:
  * 1. Find dominant orthogonal orientation of the room/building
- * 2. Snap segments within tolerance to the dominant orthogonal axes
+ * 2. Snap every segment to the dominant orthogonal axes
  * 3. Merge collinear fragments along the same wall into continuous boundaries
  */
 export function alignAndMergeSurfaces(segments, cfg = DEF) {
@@ -341,25 +341,27 @@ export function alignAndMergeSurfaces(segments, cfg = DEF) {
     domAngle = (((avgRad4 / 4) * 180) / Math.PI + 90) % 90;
   }
 
-  // 2. Snap segments within 18° of dominant orthogonal grid
+  // 2. Snap every segment to the nearest member of the dominant orthogonal grid.
+  // The phone heading is cardinal-snapped in the walking demo, so leaving a
+  // noisy fit diagonal here makes the reconstructed room disagree with the path.
   for (const s of segments) {
     const a = ((s.angleDeg % 90) + 90) % 90;
     let diff = a - domAngle;
     if (diff > 45) diff -= 90;
     if (diff < -45) diff += 90;
 
-    if (Math.abs(diff) < 18) {
-      const targetAngle = s.angleDeg - diff;
-      const tr = (targetAngle * Math.PI) / 180;
-      const nx = Math.sin(tr);
-      const ny = Math.cos(tr);
-      s.ux = nx;
-      s.uy = ny;
-      s.angleDeg = round3(((targetAngle % 360) + 360) % 360);
-      const h = s.length / 2;
-      s.a = { x: round3(s.cx - nx * h), y: round3(s.cy - ny * h) };
-      s.b = { x: round3(s.cx + nx * h), y: round3(s.cy + ny * h) };
-    }
+    const targetAngle = s.angleDeg - diff;
+    const tr = (targetAngle * Math.PI) / 180;
+    const nx = Math.sin(tr);
+    const ny = Math.cos(tr);
+    s.ux = nx;
+    s.uy = ny;
+    s.angleDeg = round3(((targetAngle % 360) + 360) % 360);
+    const h = s.length / 2;
+    s.tMin = -h;
+    s.tMax = h;
+    s.a = { x: round3(s.cx - nx * h), y: round3(s.cy - ny * h) };
+    s.b = { x: round3(s.cx + nx * h), y: round3(s.cy + ny * h) };
   }
 
   // 3. Collinear merge: merge fragments along the same wall
@@ -411,6 +413,8 @@ export function alignAndMergeSurfaces(segments, cfg = DEF) {
             length: round3(newLen),
             a: { x: round3(newCx + cur.ux * (tMin - midT)), y: round3(newCy + cur.uy * (tMin - midT)) },
             b: { x: round3(newCx + cur.ux * (tMax - midT)), y: round3(newCy + cur.uy * (tMax - midT)) },
+            tMin: tMin - midT,
+            tMax: tMax - midT,
             support: cur.support + other.support,
             confidence: Math.max(cur.confidence, other.confidence),
             ts: (cur.ts || []).concat(other.ts || []).sort((a, b) => a - b),
