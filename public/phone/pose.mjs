@@ -142,7 +142,10 @@ export class PoseEstimator {
     this.minStepIntervalMs = 280;
     this.maxStepIntervalMs = 1100;              // slower than this is not a gait
     this.maxStepRotDps = opts.maxStepRotDps || 45;   // above this you are waving, not walking
-    this.gaitConfirm = opts.gaitConfirm || 1;   // evenly-spaced peaks before we believe it
+    // Evenly-spaced peaks before we believe it. Do not lower this to make walking
+    // register sooner: at 1 every bump is a step, and a hand-held phone snakes the
+    // map across a room nobody walked (tests/pose.test.js pins it at 3).
+    this.gaitConfirm = opts.gaitConfirm || 3;
 
     // Heading filter.
     this.headingDeadbandDeg = 0.4;              // below this it is sensor shimmer

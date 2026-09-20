@@ -149,6 +149,70 @@ test('replay rebuilds the map from an empty canvas', async (t) => {
   assert.ok(replayed > 10, 'replay should re-emit detections, got ' + replayed);
 });
 
+test('CLEAR wipes the map for every viewer, not just the page that pressed it', async (t) => {
+  const { hub, server, port } = await boot();
+  t.after(() => { hub.close(); server.close(); });
+
+  const first = await connect(port, 'map');
+  await first.wait((m) => m.type === 'welcome');
+  first.send('mission_start', { scenario: 'room', rateHz: 20 });
+  await sleep(1500);
+  first.send('sim_control', { action: 'stop' });
+
+  // A viewer who opens the map later is handed the existing scan.
+  const late = await connect(port, 'map');
+  const before = await late.wait((m) => m.type === 'state_snapshot' && m.stats.detections > 5);
+  assert.ok(before.cloud.length > 0, 'a new viewer starts from the server map');
+
+  // This is exactly what the CLEAR button sends.
+  first.send('sim_control', { action: 'reset' });
+  await sleep(300);
+  const fresh = await connect(port, 'map');
+  const after = await fresh.wait((m) => m.type === 'state_snapshot');
+  assert.equal(after.stats.detections, 0, 'reset must clear the server map');
+  assert.equal(after.cloud.length, 0);
+  assert.equal(after.grid.idx.length, 0);
+  [first, late, fresh].forEach((c) => c.close());
+});
+
+test('a phone dataset save is archived to S3 as well as written to disk', async (t) => {
+  const { hub, server, port } = await boot();
+  t.after(() => { hub.close(); server.close(); });
+
+  // The handler also rewrites recordings/real_training_dataset_latest.json,
+  // which is real collected data — put it back exactly as it was.
+  const dir = path.join(__dirname, '..', 'recordings');
+  const latest = path.join(dir, 'real_training_dataset_latest.json');
+  const original = fs.existsSync(latest) ? fs.readFileSync(latest) : null;
+
+  const sent = [];
+  hub.aws.archive.enabled = true;
+  hub.aws.archive.bucket = 'demo-bucket';
+  hub.aws.archive.client = { send: async (cmd) => { sent.push(cmd.input); } };
+
+  const phone = await connect(port, 'phone');
+  await phone.wait((m) => m.type === 'welcome');
+  let savedName = null;
+  try {
+    phone.send('save_training_dataset', { dataset: { device: 'Moto G45', samples: [{ label: 'WALL' }], stats: {} } });
+    const ack = await phone.wait((m) => m.type === 'training_dataset_saved');
+    savedName = ack.filename;
+    assert.equal(ack.ok, true);
+    assert.ok(fs.existsSync(path.join(dir, savedName)), 'local copy is still written');
+
+    for (let i = 0; i < 40 && sent.length === 0; i++) await sleep(25);
+    assert.equal(sent.length, 1, 'the dataset must be uploaded');
+    assert.equal(sent[0].Bucket, 'demo-bucket');
+    assert.equal(sent[0].Key, 'recordings/' + savedName);
+    assert.equal(JSON.parse(sent[0].Body).device, 'Moto G45');
+  } finally {
+    if (savedName) { try { fs.unlinkSync(path.join(dir, savedName)); } catch (e) { /* gone */ } }
+    if (original) fs.writeFileSync(latest, original);
+    else { try { fs.unlinkSync(latest); } catch (e) { /* never created */ } }
+    phone.close();
+  }
+});
+
 test('malformed frames are reported, never fatal', async (t) => {
   const { hub, server, port } = await boot();
   t.after(() => { hub.close(); server.close(); });

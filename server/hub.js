@@ -282,8 +282,12 @@ class Hub {
             stats: dataset.stats || {},
             samples: samples,
           };
-          fs.writeFileSync(targetPath, JSON.stringify(payload, null, 2));
-          fs.writeFileSync(latestPath, JSON.stringify(payload, null, 2));
+          const json = JSON.stringify(payload, null, 2);
+          fs.writeFileSync(targetPath, json);
+          fs.writeFileSync(latestPath, json);
+          // Durable copy for the phone dataset collector, same as scan
+          // recordings. Only the timestamped file: "latest" is just an alias.
+          Promise.resolve(this.aws.archiveRecording(filename.replace(/\.json$/, ''), json)).catch(() => {});
           this.send(client, envelope('training_dataset_saved', {
             ok: true,
             filename,

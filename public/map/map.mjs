@@ -544,6 +544,9 @@ ui.btnFit.addEventListener('click', () => {
 });
 
 ui.btnReset.addEventListener('click', () => {
+  // The server owns the map and re-sends it on every snapshot and to every new
+  // viewer, so clearing only this page would bring the old scan straight back.
+  net.send('sim_control', { action: 'reset' });
   resetWorld();
   renderer.clearReconstruction();
   if (world.pose) renderer.centerOn(world.pose.x, world.pose.y);
