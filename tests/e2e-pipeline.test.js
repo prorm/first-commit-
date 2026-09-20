@@ -164,8 +164,13 @@ test('CLEAR wipes the map for every viewer, not just the page that pressed it', 
   const before = await late.wait((m) => m.type === 'state_snapshot' && m.stats.detections > 5);
   assert.ok(before.cloud.length > 0, 'a new viewer starts from the server map');
 
-  // This is exactly what the CLEAR button sends.
+  // This is exactly what the CLEAR button sends. Every open viewer must be
+  // told straight away — well inside the 1.2 s snapshot timer — and the
+  // snapshot must be marked as newer than the one that still held the old map.
   first.send('sim_control', { action: 'reset' });
+  const cleared = await late.wait((m) => m.type === 'state_snapshot' && m.resets > before.resets, 600);
+  assert.equal(cleared.stats.detections, 0, 'CLEAR reaches viewers immediately, not on the next timer tick');
+  assert.equal(cleared.cloud.length, 0);
   await sleep(300);
   const fresh = await connect(port, 'map');
   const after = await fresh.wait((m) => m.type === 'state_snapshot');

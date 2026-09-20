@@ -215,6 +215,7 @@ async function printBanner(httpsUp) {
       : ''));
   console.log('  VOICE            ' + aws.voice.label + '   (' + aws.voice.reason + ')');
   console.log('  BEDROCK          ' + (aws.bedrock.enabled ? 'ENABLED  ' + aws.bedrock.modelId : 'disabled  (' + aws.bedrock.reason + ')'));
+  console.log('  S3 ARCHIVE       ' + (aws.s3.enabled ? 'ENABLED  s3://' + aws.s3.bucket + '/' + aws.s3.prefix : 'disabled  (' + aws.s3.reason + ')'));
   console.log('  SCENARIOS        ' + SCENARIO_LIST.map((s) => s.id).join(', '));
   if (ips.length > 1) {
     console.log('  OTHER ADDRESSES  ' + ips.slice(1).map((i) => i.address).join(', '));

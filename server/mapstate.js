@@ -24,6 +24,8 @@ class MapState {
   }
 
   reset(hard = false) {
+    // Lets a viewer tell a snapshot taken after a clear from one taken before it.
+    this.resets = (this.resets || 0) + 1;
     this.grid.reset();
     this.cloud.reset();
     this.trajectory.reset();
@@ -129,6 +131,7 @@ class MapState {
       recent: this.recent.slice(-12),
       missionActive: this.missionActive,
       lastDetection: this.lastDetection,
+      resets: this.resets,
     };
   }
 

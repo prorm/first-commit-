@@ -417,7 +417,13 @@ class Hub {
     if (msg.paused != null) this.sim.setPaused(!!msg.paused);
     if (msg.action === 'start') this.sim.start(msg.rateHz);
     if (msg.action === 'stop') this.sim.stop();
-    if (msg.action === 'reset') { this.sim.setScenario(this.sim.scenarioId, msg.seed); this.map.reset(); }
+    if (msg.action === 'reset') {
+      this.sim.setScenario(this.sim.scenarioId, msg.seed);
+      this.map.reset();
+      // Tell every viewer now, not on the next timer tick: waiting up to a
+      // snapshot interval is what made CLEAR feel like it took seconds.
+      this.pushSnapshot(true);
+    }
     this.broadcast(envelope('status', this.statusPayload()));
   }
 

@@ -66,6 +66,7 @@ class AwsAdapter {
     const res = await this.archive.upload(id, body);
     if (res.ok) {
       this.stats.s3Uploads++;
+      if (process.env.SENTRY_QUIET !== 'true') console.log('[aws] archived to s3://' + this.s3Bucket + '/' + res.key);
     } else {
       this.stats.s3Failures++;
       // Nothing awaits this, so without a log line a bad bucket name, region or

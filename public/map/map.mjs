@@ -61,6 +61,10 @@ const world = {
   lastReconAt: 0,
   detections: 0,
   history: [],             // temporal class-confidence trail for the AI panel
+  // CLEAR wipes this page at once; until the server confirms it has cleared too,
+  // snapshots still carry the old map and must not be allowed to bring it back.
+  serverResets: 0,
+  clearPendingSince: 0,
 };
 
 const renderer = new MapRenderer(ui.stage);
@@ -248,6 +252,15 @@ function pushHistory(det) {
  */
 function applySnapshot(snap) {
   if (!snap) return;
+  if (world.clearPendingSince) {
+    // A snapshot from before the server processed CLEAR carries the old map.
+    // Drop it; adopt the first one that shows a newer reset (or give up waiting,
+    // so an older server that never reports resets cannot freeze the page).
+    const confirmed = snap.resets > world.serverResets;
+    if (!confirmed && Date.now() - world.clearPendingSince < 3000) return;
+    world.clearPendingSince = 0;
+  }
+  if (typeof snap.resets === 'number') world.serverResets = snap.resets;
   world.pose = snap.pose || world.pose;
   world.stats = snap.stats || world.stats;
   world.missionActive = !!snap.missionActive;
@@ -500,8 +513,12 @@ ui.btnMission.addEventListener('click', () => {
     net.send('mission_complete', {});
   } else {
     resetWorld();
+    // Naming a scenario tells the server to run the virtual walker, and it flips
+    // a live session to simulation to do it. The scenario picker is disabled in
+    // live mode but still holds a value, so it must not be sent then: the map
+    // would trace the twin's scripted loop instead of where the phone walks.
     net.send('mission_start', {
-      scenario: ui.selScenario.value || undefined,
+      scenario: world.mode === 'live' ? undefined : (ui.selScenario.value || undefined),
       rateHz: 20,
       record: true,
     });
@@ -546,6 +563,7 @@ ui.btnFit.addEventListener('click', () => {
 ui.btnReset.addEventListener('click', () => {
   // The server owns the map and re-sends it on every snapshot and to every new
   // viewer, so clearing only this page would bring the old scan straight back.
+  world.clearPendingSince = Date.now();
   net.send('sim_control', { action: 'reset' });
   resetWorld();
   renderer.clearReconstruction();
