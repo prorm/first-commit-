@@ -419,7 +419,15 @@ class Hub {
     if (msg.action === 'stop') this.sim.stop();
     if (msg.action === 'reset') {
       this.sim.setScenario(this.sim.scenarioId, msg.seed);
+      // CLEAR (halt) must leave the map empty. A still-running twin re-walks the
+      // same room and refills it within a second, which reads as the clear
+      // having failed. A scenario switch resets but keeps scanning.
+      if (msg.halt) {
+        this.sim.stop();
+        this.scanning = false;
+      }
       this.map.reset();
+      if (msg.halt) this.map.missionActive = false;
       // Tell every viewer now, not on the next timer tick: waiting up to a
       // snapshot interval is what made CLEAR feel like it took seconds.
       this.pushSnapshot(true);

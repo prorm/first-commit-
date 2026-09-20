@@ -180,6 +180,25 @@ test('CLEAR wipes the map for every viewer, not just the page that pressed it', 
   [first, late, fresh].forEach((c) => c.close());
 });
 
+test('CLEAR stays cleared while a simulated scan is still running', async (t) => {
+  const { hub, server, port } = await boot();
+  t.after(() => { hub.close(); server.close(); });
+
+  const map = await connect(port, 'map');
+  await map.wait((m) => m.type === 'welcome');
+  map.send('mission_start', { scenario: 'room', rateHz: 20 });
+  await map.wait((m) => m.type === 'state_snapshot' && m.stats.detections > 5);
+
+  // No stop first: this is the real button press, with the twin still walking.
+  map.send('sim_control', { action: 'reset', halt: true });
+  await sleep(2500);                                  // past two snapshot ticks
+  const last = map.of('state_snapshot').pop();
+  assert.equal(last.stats.detections, 0, 'a running scan must not refill the map after CLEAR');
+  assert.equal(last.cloud.length, 0);
+  assert.equal(last.missionActive, false);
+  map.close();
+});
+
 test('a phone dataset save is archived to S3 as well as written to disk', async (t) => {
   const { hub, server, port } = await boot();
   t.after(() => { hub.close(); server.close(); });
