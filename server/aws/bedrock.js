@@ -77,14 +77,23 @@ class BedrockSummarizer {
     const prompt = this.buildPrompt(summary);
     try {
       const client = this.ensureClient();
-      const body = this.isAnthropicModel()
-        ? {
-            anthropic_version: 'bedrock-2023-05-31',
-            max_tokens: 400,
-            temperature: 0.3,
-            messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
-          }
-        : { inputText: prompt, textGenerationConfig: { maxTokenCount: 400, temperature: 0.3 } };
+      let body;
+      if (this.isAnthropicModel()) {
+        body = {
+          anthropic_version: 'bedrock-2023-05-31',
+          max_tokens: 400,
+          temperature: 0.3,
+          messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+        };
+      } else if (this.isNovaModel()) {
+        body = {
+          schemaVersion: 'messages-v1',
+          messages: [{ role: 'user', content: [{ text: prompt }] }],
+          inferenceConfig: { maxTokens: 400, temperature: 0.3 },
+        };
+      } else {
+        body = { inputText: prompt, textGenerationConfig: { maxTokenCount: 400, temperature: 0.3 } };
+      }
 
       const out = await client.send(new InvokeModelCommand({
         modelId: this.modelId,
@@ -103,8 +112,13 @@ class BedrockSummarizer {
 
   isAnthropicModel() { return /anthropic|claude/i.test(this.modelId); }
 
+  // Covers bare ids (amazon.nova-lite-v1:0) and inference profiles (us.amazon.nova-...).
+  isNovaModel() { return /amazon\.nova/i.test(this.modelId); }
+
   extractText(parsed) {
     if (!parsed) return '';
+    const novaParts = parsed.output && parsed.output.message && parsed.output.message.content;
+    if (Array.isArray(novaParts)) return novaParts.map((c) => c.text || '').join('').trim();
     if (Array.isArray(parsed.content)) {
       return parsed.content.map((c) => (typeof c === 'string' ? c : c.text || '')).join('').trim();
     }

@@ -1010,6 +1010,18 @@ test('Bedrock prompt carries the measured numbers and the model limits', () => {
   assert.ok(/hedged language/i.test(prompt), 'the prompt must require hedging');
 });
 
+test('Bedrock speaks the Nova schema and reads the Nova response', () => {
+  const { BedrockSummarizer } = require('../server/aws/bedrock');
+  const nova = new BedrockSummarizer({ region: 'us-east-1', modelId: 'amazon.nova-lite-v1:0', enabled: false });
+  assert.ok(nova.isNovaModel() && !nova.isAnthropicModel());
+  assert.ok(new BedrockSummarizer({ modelId: 'us.amazon.nova-lite-v1:0' }).isNovaModel(),
+    'an inference-profile id must be recognised too');
+  assert.equal(nova.extractText({ output: { message: { role: 'assistant', content: [{ text: ' A room. ' }] } } }), 'A room.');
+  // Titan and Claude response shapes must keep working.
+  assert.equal(nova.extractText({ results: [{ outputText: 'titan' }] }), 'titan');
+  assert.equal(nova.extractText({ content: [{ type: 'text', text: 'claude' }] }), 'claude');
+});
+
 test('a recording listing always reports an id that load() can resolve', () => {
   // The demo's fallback depends on this: a hand-renamed recording must not
   // list fine and then fail to open.
